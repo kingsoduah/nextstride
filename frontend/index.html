@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NextStride — When everything matters, know what to do next</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">NextStride</div>
+  <div class="top-actions">
+    <span id="userLabel" class="muted"></span>
+    <button id="logoutBtn" class="btn btn-ghost hidden">Log out</button>
+  </div>
+</header>
+
+<main class="container">
+  <!-- Landing / Welcome (PRD 10.1) -->
+  <section id="view-landing" class="card">
+    <h1>NextStride</h1>
+    <p class="tagline">When everything matters, know what to do next.</p>
+    <p>Bring your competing responsibilities. NextStride helps you understand what deserves attention now, why, and what to do next.</p>
+    <div class="row">
+      <button class="btn btn-primary" data-go="auth">Get Started</button>
+      <button class="btn" data-go="auth">Log In</button>
+    </div>
+  </section>
+
+  <!-- Auth (PRD 11) -->
+  <section id="view-auth" class="card hidden">
+    <h2>Sign up / Log in</h2>
+    <div class="grid2">
+      <div>
+        <h3>Create account</h3>
+        <input id="regName" placeholder="Name" />
+        <input id="regEmail" placeholder="Email" />
+        <input id="regPassword" type="password" placeholder="Password (6+ chars)" />
+        <button id="registerBtn" class="btn btn-primary">Sign Up</button>
+      </div>
+      <div>
+        <h3>Log in</h3>
+        <input id="loginEmail" placeholder="Email" />
+        <input id="loginPassword" type="password" placeholder="Password" />
+        <button id="loginBtn" class="btn btn-primary">Log In</button>
+      </div>
+    </div>
+    <p id="authError" class="error"></p>
+  </section>
+
+  <!-- Onboarding (PRD 12) -->
+  <section id="view-onboarding" class="card hidden">
+    <h2>How NextStride works</h2>
+    <ol>
+      <li>You don't need to do everything at once.</li>
+      <li>Tell NextStride what's competing for your attention.</li>
+      <li>We'll help you understand what deserves attention first and why.</li>
+      <li>When things change, update us and we'll reassess.</li>
+    </ol>
+    <button class="btn btn-primary" data-go="hub">Continue to Priority Hub</button>
+  </section>
+
+  <!-- Priority Hub (PRD 13) -->
+  <section id="view-hub" class="card hidden">
+    <h2>What's competing for your attention?</h2>
+    <textarea id="situationInput" rows="5" placeholder="I have a lecture at 2 PM, fellowship starts at 4:30 PM, a customer is waiting for a delivery, and an assignment is due tomorrow…"></textarea>
+    <div class="row">
+      <button id="analyzeBtn" class="btn btn-primary">Analyze My Situation</button>
+    </div>
+    <p id="hubError" class="error"></p>
+  </section>
+
+  <!-- Understanding (PRD 14) -->
+  <section id="view-understanding" class="card hidden">
+    <h2>Here's what I understand</h2>
+    <div id="understandingBox"></div>
+    <div class="row">
+      <button id="confirmBtn" class="btn btn-primary">Confirm — Get Recommendation</button>
+      <button id="editBtn" class="btn">Edit situation</button>
+    </div>
+    <textarea id="editInput" rows="4" class="hidden"></textarea>
+    <div class="row hidden" id="editRow">
+      <button id="saveEditBtn" class="btn btn-primary">Save &amp; Re-analyze</button>
+    </div>
+  </section>
+
+  <!-- Recommendation (PRD 15) -->
+  <section id="view-recommendation" class="card hidden">
+    <h2>Your NextStride</h2>
+    <div id="recommendationBox"></div>
+    <h3>Situation changed?</h3>
+    <textarea id="updateInput" rows="3" placeholder="e.g. My assistant just said they can't cover the fellowship."></textarea>
+    <div class="row">
+      <button id="reassessBtn" class="btn btn-primary">Reassess</button>
+      <button id="newSituationBtn" class="btn">New situation</button>
+    </div>
+  </section>
+
+  <!-- Feedback (PRD 17) -->
+  <section id="view-feedback" class="card hidden">
+    <h2>Did this help?</h2>
+    <div class="row">
+      <button id="helpfulBtn" class="btn">👍 Helpful</button>
+      <button id="notHelpfulBtn" class="btn">👎 Not helpful</button>
+    </div>
+    <input id="feedbackNote" placeholder="Tell us what happened (optional)" />
+    <p id="feedbackMsg" class="muted"></p>
+  </section>
+</main>
+
+<footer class="footer muted">NextStride MVP v0.1 — AI recommends. You decide.</footer>
+<script src="app.js"></script>
+</body>
+</html>

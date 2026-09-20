@@ -1,0 +1,98 @@
+[
+  {
+    "id": "25fd5fcc44bd",
+    "user_id": "fd9d5b2138a1",
+    "text": "I have lecture by 2pm and Project is due tomorrow and customers are waiting for me at my shop currently to get a product from me urgently.",
+    "context": {
+      "responsibilities": [
+        {
+          "id": "da8b1563",
+          "title": "I have lecture by 2pm",
+          "category": "academic",
+          "time_ref": "2pm",
+          "fixed_time": true,
+          "flexible": false,
+          "delegatable": false,
+          "detail": "I have lecture by 2pm"
+        },
+        {
+          "id": "529db161",
+          "title": "Project is due tomorrow",
+          "category": "other",
+          "time_ref": "tomorrow",
+          "fixed_time": false,
+          "flexible": true,
+          "delegatable": false,
+          "detail": "Project is due tomorrow"
+        },
+        {
+          "id": "c6a2130a",
+          "title": "customers are waiting for me at my shop currently to get a product from me urgently",
+          "category": "business",
+          "time_ref": "",
+          "fixed_time": false,
+          "flexible": true,
+          "delegatable": false,
+          "detail": "customers are waiting for me at my shop currently to get a product from me urgently"
+        }
+      ],
+      "conflicts": [
+        {
+          "id": "cae77385",
+          "description": "Possible time overlap between 'I have lecture by 2pm' and 'Project is due tomorrow'.",
+          "involves": [
+            "da8b1563",
+            "529db161"
+          ]
+        },
+        {
+          "id": "506984aa",
+          "description": "'I have lecture by 2pm' has a fixed time and competes with: Project is due tomorrow, customers are waiting for me at my shop currently to get a p.",
+          "involves": [
+            "da8b1563",
+            "529db161",
+            "c6a2130a"
+          ]
+        }
+      ],
+      "uncertainties": [
+        "No delegation option was mentioned. If anyone could cover part of this, mention them for a better plan."
+      ]
+    },
+    "confirmed": true,
+    "recommendations": [
+      {
+        "version": 1,
+        "recommended_priority": "I have lecture by 2pm",
+        "why": "Prioritized by fixed time, deadline proximity, consequences, and delegation options. fixed time \u2014 cannot easily move; role responsibility / dependency.",
+        "next_action": "Focus on 'I have lecture by 2pm' now (2pm), then handle the next item in order.",
+        "others": [
+          {
+            "responsibility_id": "529db161",
+            "title": "Project is due tomorrow",
+            "suggested_handling": "Postpone / reschedule 'Project is due tomorrow' until after the top priority (tomorrow)."
+          },
+          {
+            "responsibility_id": "c6a2130a",
+            "title": "customers are waiting for me at my shop currently to get a product from me urgently",
+            "suggested_handling": "Postpone / reschedule 'customers are waiting for me at my shop currently to get a product from me urgen' until after the top priority (no deadline given)."
+          }
+        ],
+        "reassess_if": [
+          "Coverage / delegation falls through.",
+          "A lecture, shift, or program time changes.",
+          "A deadline moves closer or a new consequence appears."
+        ],
+        "uncertainty_notes": "Based only on what you provided. If times or consequences change, reassess rather than treating this as final.",
+        "created_at": 1789868204
+      }
+    ],
+    "reassessments": [],
+    "feedback": {
+      "helpful": false,
+      "note": "",
+      "created_at": 1789868245
+    },
+    "created_at": 1789868105
+  }
+]

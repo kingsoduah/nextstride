@@ -1,0 +1,3 @@
+# NextStride MVP v0.1 — no third-party dependencies.
+# Backend uses Python 3.11+ standard library only.
+# No install step required. Run:  python backend/server.py
