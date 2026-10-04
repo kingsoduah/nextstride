@@ -1,2 +1,34 @@
-__pycache__/
+# Node / Next.js / NestJS
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Prisma
+prisma/migrations/dev.db*
+*.db
+*.db-journal
+
+# Env / secrets (never commit)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Local postgres data (pgserver)
+/.pgdata/
+
+# Logs / OS
+npm-debug.log*
+*.log
+.DS_Store
+Thumbs.db
+
+# Python legacy prototype (archived reference)
+archive/v0.1-prototype/backend/__pycache__/
 *.pyc
+
+# Local data residue
+data/

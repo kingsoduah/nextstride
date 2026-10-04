@@ -1,0 +1,29 @@
+# Render Blueprint for the NextStride NestJS API (free tier).
+# In Render: New → Blueprint → select this repo (spec path: render.yaml).
+# Then set the env vars below in the dashboard (values marked `sync: false`).
+services:
+  - type: web
+    name: nextstride-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build && npx prisma migrate deploy
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        sync: false # managed Postgres connection string (Neon/Netlify DB)
+      - key: BETTER_AUTH_SECRET
+        generateValue: true # or paste your own 64-hex secret
+      - key: BETTER_AUTH_URL
+        sync: false # e.g. https://nextstride-api.onrender.com
+      - key: CORS_ORIGIN
+        sync: false # e.g. https://nextstride.netlify.app
+      - key: GROQ_API_KEY
+        sync: false # server-side only, never commit
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-20b
+      - key: PORT
+        value: "10000" # Render injects its own PORT; harmless default

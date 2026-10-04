@@ -1,77 +1,131 @@
-# NextStride — Initial Working Version (MVP v0.1)
+# NextStride
 
 > **When everything matters, know what to do next.**
 
-## What NextStride Is
+NextStride is an AI-powered priority decision assistant for students juggling competing responsibilities. Instead of being another task manager, calendar, or generic chatbot, it answers one question: *what should I focus on now, what can wait, what should be delegated or communicated — and what should I do next?*
 
-NextStride is an AI-powered priority decision assistant. It is **not** a task manager, calendar, or generic chatbot. It focuses on the single decision that happens when important responsibilities compete for limited time:
+**Core principle:** AI recommends. The user decides. The backend records. New information triggers reassessment.
 
-> What should I focus on now, what can wait, what should be delegated or communicated, and what should I do next?
+## The Problem
 
-Users describe their situation in natural language. NextStride understands the context, identifies conflicts, recommends what deserves attention next, explains why, gives a concrete next action, and reassesses when circumstances change.
-
-Source of truth: `docs/NextStride Product Requirements Document (PRD).md`.
-
-Core principle: **AI recommends. User decides. Backend records. New information triggers reassessment.**
-
-## The Problem It Solves
-
-Students carry multiple significant responsibilities — leadership, fellowships, businesses, jobs, courses, family, projects. These compete for the same time and attention (e.g. a lecture 2–5:30pm while coordinating a 4:30pm fellowship, with a customer delivery and an assignment due tomorrow).
-
-The hard part is not listing tasks. It is deciding:
-
-- What should happen first?
-- What can wait, be delegated, or be communicated?
-- What consequence should be accepted?
-- What should I actually do right now?
-
-Calendars and task managers store tasks but do not reason through tradeoffs. NextStride makes that decision process structured and actionable.
+Students carry multiple significant responsibilities — lectures, fellowships, businesses, jobs, courses, family. These compete for the same limited time and attention. The hard part is not listing tasks; it is reasoning through tradeoffs: what goes first, what can be delegated, what must be communicated, and which consequence to accept.
 
 ## Who It Is For
 
-Primary user: **students with 2+ meaningful responsibility areas** who regularly face tradeoffs — student leaders, fellowship/church workers, student entrepreneurs, working students, students in professional courses or community organizations.
+Students with two or more meaningful responsibility areas who regularly face tradeoffs — student leaders, fellowship workers, student entrepreneurs, working students, and highly involved university students.
 
-Desired feeling: *“I know what I should focus on right now.”*
+## How It Works
 
-## Main User Journey
+1. **Describe** what is competing for your attention in natural language (Priority Hub).
+2. **Confirm** NextStride's understanding — responsibilities, conflicts, uncertainties — or edit it. No recommendation is made from an unconfirmed reading.
+3. **Receive** a recommendation: what deserves attention now, why, a concrete next action, what happens to the other responsibilities, and what would trigger a rethink.
+4. **Update** when circumstances change; NextStride reassesses and versions the recommendation (v1 → v2), preserving history.
+5. **Give feedback** (helpful / not helpful) so usefulness can be measured.
 
-1. **Discover** — Landing page: “When everything matters, know what to do next.”
-2. **Sign Up / Log In** — Name, email, password → authenticated session.
-3. **Onboarding** — 4-step mental model (no AI): you don’t need to do everything at once; tell us what competes; we’ll help prioritize; update us to reassess.
-4. **Enter Situation (Priority Hub)** — `What's competing for your attention?` → natural-language input → `POST /api/situations`.
-5. **Confirm Understanding** — “Here’s what I understand” (responsibilities, conflicts, uncertainties) → Confirm or Edit.
-6. **Recommendation** — Recommended priority + why + next action + what happens to the others + reassess-if triggers → `POST /api/situations/:id/prioritize`.
-7. **Act** — User acts. The MVP never autonomously executes consequential actions.
-8. **Update + Reassess** — New info (e.g. “assistant can’t cover”) → `POST /api/situations/:id/reassess` → versioned Recommendation v2. History is preserved, never overwritten.
-9. **Feedback** — 👍/👎 + optional outcome note → `POST /api/situations/:id/feedback`.
+## Features (MVP)
 
-## Current Status
+- Landing, email/password signup and login, 4-step onboarding
+- Priority Hub with example situations
+- AI situation understanding with confirm/edit gate
+- Versioned recommendations (immutable, never overwritten)
+- Reassessment on new information
+- Feedback capture and decision history
+- Swagger/OpenAPI docs at `/docs`
+- AI observability (`AiRun` log: provider, model, prompt version, latency, validation status)
 
-**Working v0.1 — implemented and runnable locally.**
+Out of scope for this MVP: calendar integrations, automated messaging, notifications, collaboration, gamification, analytics dashboards, billing, OAuth/social login.
 
-| Area | Status |
+## Tech Stack
+
+| Layer | Choice |
 |---|---|
-| Frontend (`frontend/`) | Landing, auth, onboarding, Priority Hub, understanding, recommendation, reassessment, feedback — static HTML/CSS/JS |
-| Backend (`backend/server.py`) | Auth, situation lifecycle, AI orchestration, versioning, feedback — Python stdlib HTTP server |
-| AI service (`backend/ai_service.py`) | Rule-based `understandSituation / analyzeConflicts / generateRecommendation / reassessSituation` aligned with PRD §§18–20. LLM-ready signatures; no external API needed |
-| Storage (`data/*.json`) | File-based JSON mirroring PRD §24 entities (users, situations, contexts, responsibilities, conflicts, recommendations, reassessments, feedback). PostgreSQL/Prisma migration planned |
-| API | `POST /api/auth/register, /login, /logout`, `GET /api/auth/me`, `POST /api/situations`, `GET/PATCH /api/situations/:id`, `POST /:id/prioritize`, `GET /:id/recommendations`, `POST /:id/reassess`, `POST /:id/feedback` |
+| Frontend | Next.js 15 + TypeScript + React 19 |
+| Backend | NestJS 11 + TypeScript, REST, Swagger |
+| Database | PostgreSQL + Prisma ORM (migrations) |
+| Auth | Better Auth (email + password, 7-day sessions) |
+| AI | Groq API (`openai/gpt-oss-20b`) behind a provider interface, Zod-validated structured output, deterministic rule-based fallback |
 
-### Run It
+## Architecture
 
-```powershell
-python backend/server.py
-# open http://localhost:8000
+```
+Browser → Next.js (Netlify)
+            ├─ same-origin /api/* ──proxy (rewrite)──▶ NestJS API (Render)
+            │                                            ├─ Better Auth sessions ─▶ PostgreSQL (Neon/Netlify DB)
+            │                                            ├─ Prisma persistence
+            │                                            └─ AiService → Groq → Zod validation → fallback on failure
+            └─ static pages + client UI
 ```
 
-No dependencies to install (Python 3.11+ stdlib only).
+Same-origin API proxying keeps session cookies first-party (`SameSite=Lax`, `HttpOnly`). Raw LLM output is never persisted: every AI response must pass Zod schemas or the request falls back / fails safely.
 
-### What Is Intentionally Out of Scope (per PRD §32)
+## Local Development
 
-Calendar/WhatsApp integrations, automated messaging, voice, notifications, task automation, collaboration, gamification, analytics, billing, multiple AI agents — all deferred until the core loop is validated.
+Prerequisites: Node 20+, Python 3.11+ (only for the optional local Postgres helper), a Groq API key.
 
-### Next Steps
+```powershell
+# 1. PostgreSQL (real, local, no Docker needed)
+pip install pgserver
+python scripts/pg_local.py start     # prints DATABASE_URL, syncs backend/.env
 
-- Replace rule-based `ai_service.py` with LLM calls using the PRD §§22–23 input/output contracts (structured JSON + validation).
-- Migrate `data/*.json` to PostgreSQL/Prisma per PRD §24.
-- Add loading/error states polish, logging/observability (PRD §33), and real-user validation (PRD §§30–31).
+# 2. Backend
+cd backend
+npm install
+npx prisma migrate dev               # creates all tables
+npm run start:dev                    # http://localhost:3001, docs at /docs
+
+# 3. Frontend (new terminal)
+cd frontend
+npm install
+npm run dev                          # http://localhost:3000
+```
+
+## Environment Variables
+
+Never commit real values (`.env` files are git-ignored). See `backend/.env.example` and `frontend/.env.example`.
+
+Backend (`backend/.env`):
+
+| Variable | Purpose |
+|---|---|
+| `PORT` | API port (local: `3001`) |
+| `DATABASE_URL` | PostgreSQL connection string |
+| `BETTER_AUTH_SECRET` | Session signing secret (generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`) |
+| `BETTER_AUTH_URL` | Public API origin (local: `http://localhost:3001`) |
+| `CORS_ORIGIN` | Allowed web origin (local: `http://localhost:3000`) |
+| `GROQ_API_KEY` | Server-side Groq key (never exposed to the browser) |
+| `GROQ_MODEL` | Groq model id (e.g. `openai/gpt-oss-20b`) |
+
+Frontend (`frontend/.env.local`):
+
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | API origin for the browser (local: `http://localhost:3001`; production: empty = same-origin proxy) |
+| `BACKEND_URL` | Build-time API target for Next.js `/api/*` + `/docs*` proxy rewrites (local default: `http://localhost:3001`) |
+
+## Deployment
+
+| Service | Target | Status |
+|---|---|---|
+| Frontend | Netlify (`netlify.toml` in repo root) | _URL added after deploy_ |
+| Backend | Render Free web service (`render.yaml` Blueprint) | _URL added after deploy_ |
+| Database | Managed PostgreSQL (Neon/Netlify DB), Prisma `migrate deploy` on build | _provisioned at deploy_ |
+
+Production notes: set `BETTER_AUTH_URL` to the Render URL, `CORS_ORIGIN` to the Netlify URL, `BACKEND_URL` (Netlify) to the Render URL, and keep `NEXT_PUBLIC_API_URL` empty so the browser uses the same-origin proxy. Render Free sleeps after inactivity (cold starts ~1 min); Groq free-tier limits apply.
+
+## Project Layout
+
+```
+frontend/          Next.js app (routes, components, API client, Better Auth client)
+backend/           NestJS API (auth, situations, ai/, prisma/, Swagger)
+backend/prisma/    schema.prisma + migrations
+docs/              PRD, implementation plan, design system, ADRs
+archive/           v0.1 Python/vanilla prototype (reference only)
+scripts/           local Postgres helper
+```
+
+## Known MVP Limitations
+
+- Email/password auth only; no password reset, no OAuth.
+- AI quality depends on Groq model availability and free-tier limits; offline/AI-down degrades to the rule-based fallback.
+- Free-tier hosting sleeps when idle (first request after sleep is slow).
+- Single-language (English) UI; desktop-first responsive design.

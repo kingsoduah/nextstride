@@ -1,0 +1,20 @@
+{
+  "name": "nextstride",
+  "private": true,
+  "version": "0.1.0",
+  "description": "NextStride — when everything matters, know what to do next.",
+  "workspaces": [
+    "frontend",
+    "backend",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace frontend",
+    "dev:api": "npm run start:dev --workspace backend",
+    "build": "npm run build --workspaces",
+    "lint": "npm run lint --workspaces"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

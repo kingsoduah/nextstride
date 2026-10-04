@@ -1,0 +1,14 @@
+# Netlify deploys the Next.js web app. The NestJS API runs on Render (see /render.yaml).
+# Dashboard settings for the Netlify site:
+#   Base directory:  frontend
+#   Build command:   npm run build
+#   Publish:         .next
+#   Env vars:        BACKEND_URL=<Render API origin>   (used by next.config.ts rewrites)
+#                    NEXT_PUBLIC_API_URL=              (empty = same-origin /api proxy)
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
