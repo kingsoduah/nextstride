@@ -25,5 +25,5 @@ services:
         sync: false # server-side only, never commit
       - key: GROQ_MODEL
         value: openai/gpt-oss-20b
-      - key: PORT
-        value: "10000" # Render injects its own PORT; harmless default
+      # NOTE: no PORT entry — Render injects PORT automatically and the API
+      # listens on process.env.PORT (see backend/src/main.ts).
