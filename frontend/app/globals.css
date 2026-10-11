@@ -493,3 +493,86 @@ textarea.field { min-height: 90px; resize: vertical; }
   .landing-description { font-size: 15px; }
   .btn-lg { padding: 12px 20px; font-size: 15px; }
 }
+
+/* ---- Mobile UX: composer, drawer nav, small-screen layout ---- */
+
+/* Never allow horizontal page overflow on narrow viewports. `clip` (not
+   hidden) preserves sticky positioning on wider screens. */
+html, body { overflow-x: clip; }
+
+/* Mobile top bar with hamburger; desktop keeps the sidebar instead. */
+.mobile-bar { display: none; }
+.drawer-root { display: none; }
+
+@media (max-width: 860px) {
+  .mobile-bar {
+    display: flex; align-items: center; gap: 10px;
+    position: sticky; top: 0; z-index: 40;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+  }
+  .mobile-brand { font-weight: 700; font-size: 16px; }
+  .mobile-menu-btn { min-width: 40px; min-height: 40px; font-size: 18px; }
+
+  .drawer-root { display: block; }
+  .drawer-scrim {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0, 0, 0, 0.4);
+  }
+  .drawer-panel {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 61;
+    width: min(300px, 85vw);
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: drawer-in 0.18s ease-out;
+  }
+  @keyframes drawer-in {
+    from { transform: translateX(-24px); opacity: 0.6; }
+    to { transform: translateX(0); opacity: 1; }
+  }
+  .drawer-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .drawer-head .brand { font-weight: 700; font-size: 16px; }
+  .drawer-body { flex: 1; overflow-y: auto; padding: 8px; -webkit-overflow-scrolling: touch; }
+  /* Reuse the desktop sidebar inside the drawer. */
+  .drawer-body .sidebar {
+    display: flex; position: static; height: auto; width: auto;
+    border-right: 0; padding: 4px;
+  }
+  .drawer-body .nav-item { min-height: 44px; font-size: 15px; }
+  .drawer-body .nav-row-menu-item { min-height: 44px; }
+
+  /* Composer: compact start, roomy touch targets, wrapping footer. */
+  .composer textarea { min-height: 44px; max-height: 200px; font-size: 16px; }
+  .composer.expanded textarea { max-height: 60vh; }
+  .composer-actions .icon-btn { min-width: 40px; min-height: 40px; }
+  .composer-footer { flex-wrap: wrap; gap: 8px; }
+  .composer-footer > .muted { flex: 1 1 100%; }
+  .model-select { max-width: 130px; }
+}
+
+@media (max-width: 480px) {
+  .welcome h1 { font-size: 20px; }
+  .center { padding: 28px 12px 56px; }
+  .composer { padding: 12px 12px 8px; }
+  .card { padding: 16px; }
+  .model-select { max-width: 110px; font-size: 12px; }
+}
+
+@media (max-width: 860px) {
+  .sidebar { display: none; }
+  .examples { grid-template-columns: 1fr; }
+  .center { padding: 40px 16px 64px; }
+  .auth-card { padding: 24px 20px 16px; }
+  .landing-content h1 { font-size: 32px; }
+  .landing-tagline { font-size: 18px; }
+  .landing-description { font-size: 15px; }
+  .btn-lg { padding: 12px 20px; font-size: 15px; }
+}

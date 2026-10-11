@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NextStride</string>
+    <!-- Deployed production site. Change with the hosting URL if it moves. -->
+    <string name="website_url">https://nextstrid.netlify.app</string>
+</resources>

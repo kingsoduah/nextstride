@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Framework theme (no appcompat): light shell matching the web app,
+         with a branded launch background so startup never flashes white. -->
+    <style name="Theme.NextStride" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash</item>
+        <item name="android:statusBarColor">#171717</item>
+        <item name="android:navigationBarColor">#FAFAFA</item>
+    </style>
+</resources>

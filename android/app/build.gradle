@@ -1,0 +1,35 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Debug-signed testing build of the deployed NextStride PWA wrapper.
+// No server secrets or API keys live here: the app loads the deployed
+// HTTPS site, and all backend/AI traffic uses the site's own session.
+android {
+    namespace 'com.qubators.nextstride'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.qubators.nextstride'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        debug {
+            // Gradle signs debug builds automatically with a debug key.
+            // This APK is a TESTING deliverable, not a production release.
+            versionNameSuffix '-debug'
+        }
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

@@ -1,7 +1,29 @@
 "use client";
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { useVoiceDraft } from "@/hooks/useVoiceDraft";
 import { VoiceInputButton } from "./VoiceInputButton";
+
+/**
+ * Mobile-friendly auto-grow: compact single row at rest, grows with content
+ * up to a cap (collapsed ~200px, expanded ~60vh), then scrolls internally.
+ * The draft lives in React state, so toggling expanded never loses text.
+ */
+function useAutoGrow(
+  ref: RefObject<HTMLTextAreaElement | null>,
+  measured: string,
+  expanded: boolean,
+) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    const cap = expanded
+      ? Math.floor(window.innerHeight * 0.6)
+      : 200;
+    el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
+    el.style.overflowY = el.scrollHeight > cap ? "auto" : "hidden";
+  }, [ref, measured, expanded]);
+}
 
 export function Composer({
   onSubmit,
@@ -27,10 +49,15 @@ export function Composer({
     loading,
   });
   const { rec, listening } = voice;
+  const [expanded, setExpanded] = useState(false);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const shown =
+    value + (listening && rec.interimText ? (value && !value.endsWith(" ") ? " " : "") + rec.interimText : "");
+  useAutoGrow(areaRef, shown, expanded);
 
   return (
     <form
-      className="composer"
+      className={`composer${expanded ? " expanded" : ""}`}
       onSubmit={(e) => {
         e.preventDefault();
         voice.handleSubmitWithVoice();
@@ -41,8 +68,16 @@ export function Composer({
       </label>
       <textarea
         id="composer-input"
-        value={value + (listening && rec.interimText ? (value && !value.endsWith(" ") ? " " : "") + rec.interimText : "")}
+        ref={areaRef}
+        rows={1}
+        value={shown}
         onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && expanded) {
+            e.preventDefault();
+            setExpanded(false);
+          }
+        }}
         placeholder={placeholder}
         aria-label="What's competing for your attention?"
       />
@@ -51,6 +86,16 @@ export function Composer({
           {listening ? "Listening… speak now" : "AI recommends · you decide"}
         </span>
         <span className="composer-actions">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse the writing area" : "Expand the writing area"}
+            title={expanded ? "Collapse" : "Expand"}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <span aria-hidden>{expanded ? "⤡" : "⤢"}</span>
+          </button>
           {modelSelector}
           <VoiceInputButton
             recState={rec.state}
@@ -103,18 +148,31 @@ export function ControlledComposer({
     loading,
   });
   const { rec, listening } = voice;
+  const [expanded, setExpanded] = useState(false);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+  const shown =
+    value + (listening && rec.interimText ? (value && !value.endsWith(" ") ? " " : "") + rec.interimText : "");
+  useAutoGrow(areaRef, shown, expanded);
 
   return (
     <form
-      className="composer"
+      className={`composer${expanded ? " expanded" : ""}`}
       onSubmit={(e) => {
         e.preventDefault();
         voice.handleSubmitWithVoice();
       }}
     >
       <textarea
-        value={value + (listening && rec.interimText ? (value && !value.endsWith(" ") ? " " : "") + rec.interimText : "")}
+        ref={areaRef}
+        rows={1}
+        value={shown}
         onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Escape" && expanded) {
+            e.preventDefault();
+            setExpanded(false);
+          }
+        }}
         placeholder={placeholder}
         aria-label={submitLabel}
       />
@@ -123,6 +181,16 @@ export function ControlledComposer({
           {listening ? "Listening… speak now" : ""}
         </span>
         <span className="composer-actions">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-expanded={expanded}
+            aria-label={expanded ? "Collapse the writing area" : "Expand the writing area"}
+            title={expanded ? "Collapse" : "Expand"}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            <span aria-hidden>{expanded ? "⤡" : "⤢"}</span>
+          </button>
           {modelSelector}
           <VoiceInputButton
             recState={rec.state}
