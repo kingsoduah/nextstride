@@ -56,12 +56,9 @@ jobs:
         working-directory: ${{ github.workspace }}
 
       - name: Install Gradle
-        run: |
-          set -e
-          curl -sS -o /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"
-          unzip -q /tmp/gradle.zip -d /tmp
-          echo "/tmp/gradle-${GRADLE_VERSION}/bin" >> "$GITHUB_PATH"
-        working-directory: ${{ github.workspace }}
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --no-daemon
