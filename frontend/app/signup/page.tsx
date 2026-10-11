@@ -11,28 +11,94 @@ export default function SignupPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !email || !password) return;
+    setBusy(true);
+    setError("");
+    authClient.signUp.email(
+      { name, email, password },
+      {
+        onSuccess: () => router.push("/onboarding"),
+        onError: (ctx) => {
+          setError(ctx.error.message ?? "Sign up failed");
+          setBusy(false);
+        },
+      },
+    );
+  };
+
   return (
-    <main className="center" style={{ maxWidth: 440 }}>
-      <h1>Create your account</h1>
-      <input className="field" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" />
-      <input className="field" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email" />
-      <input className="field" type="password" placeholder="Password (6+ characters)" value={password} onChange={(e) => setPassword(e.target.value)} aria-label="Password" />
-      {error && <p className="error">{error}</p>}
-      <button
-        className="btn btn-primary"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true);
-          setError("");
-          authClient.signUp.email(
-            { name, email, password },
-            { onSuccess: () => router.push("/onboarding"), onError: (ctx) => { setError(ctx.error.message ?? "Sign up failed"); setBusy(false); } },
-          );
-        }}
-      >
-        Sign Up
-      </button>
-      <p className="muted">Have an account? <Link href="/login">Log in</Link></p>
+    <main className="auth-page">
+      <div className="auth-modal">
+        <div className="auth-modal-header">
+          <h1>Get started</h1>
+          <p className="muted">Create your NextStride account</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="field-group">
+            <label htmlFor="name" className="field-label">Name</label>
+            <input
+              id="name"
+              type="text"
+              className="field"
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="name"
+              required
+              disabled={busy}
+            />
+          </div>
+
+          <div className="field-group">
+            <label htmlFor="email" className="field-label">Email</label>
+            <input
+              id="email"
+              type="email"
+              className="field"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
+              required
+              disabled={busy}
+            />
+          </div>
+
+          <div className="field-group">
+            <label htmlFor="password" className="field-label">Password</label>
+            <input
+              id="password"
+              type="password"
+              className="field"
+              placeholder="At least 6 characters"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+              minLength={6}
+              disabled={busy}
+            />
+          </div>
+
+          {error && <p className="error" role="alert">{error}</p>}
+
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            disabled={busy}
+          >
+            {busy ? "Creating account…" : "Create account"}
+          </button>
+        </form>
+
+        <p className="auth-footer">
+          Have an account? <Link href="/login">Log in</Link>
+        </p>
+      </div>
     </main>
   );
 }

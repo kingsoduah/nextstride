@@ -69,11 +69,17 @@ model Situation {
   userId          String
   user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   text            String
+  // Owner-set display name for the sidebar (Phase D rename). Null = no custom
+  // name yet; clients fall back to a slice of `text`. Rename never touches
+  // `text`, so messages, recommendations, snapshots and history stay intact.
+  title           String?
   confirmed       Boolean           @default(false)
   context         SituationContext?
   recommendations Recommendation[]
   reassessments   Reassessment[]
   feedback        Feedback?
+  decisionContexts DecisionContext[]
+  recommendationsV2 RecommendationV2[]
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -168,4 +174,50 @@ model AiRun {
   createdAt        DateTime @default(now())
 
   @@index([situationId, createdAt])
+}
+
+// --- NextStride V2: versioned structured decision contexts (Phase 2+) ---
+// V1 SituationContext rows are NEVER modified by V2. Each parse appends a new
+// version, giving reassessment history (Phase 6) and V1-vs-V2 comparison
+// (Phase 7) for free. The structured context itself is JSON to avoid
+// premature relational complexity; later phases add tables only as justified.
+model DecisionContext {
+  id            String   @id @default(cuid())
+  situationId   String
+  situation     Situation @relation(fields: [situationId], references: [id], onDelete: Cascade)
+  version       Int
+  timezone      String   @default("Africa/Lagos")
+  reference     Json
+  context       Json
+  resolutions   Json     @default("{}")
+  questions     String[] @default([])
+  provider      String   @default("")
+  promptVersion String   @default("")
+  createdAt     DateTime @default(now())
+
+  @@unique([situationId, version])
+  @@index([situationId, version])
+}
+
+// --- NextStride V2: versioned AI recommendations (Phase 4) ---
+// Mirrors the DecisionContext versioning pattern: immutable rows, never
+// UPDATE - only INSERT with version = max + 1. Each row pins the context
+// version and analysis snapshot it reasoned over, plus the previous
+// recommendation id for the reassessment chain. V1 Recommendation untouched.
+model RecommendationV2 {
+  id             String   @id @default(cuid())
+  situationId    String
+  situation      Situation @relation(fields: [situationId], references: [id], onDelete: Cascade)
+  version        Int
+  contextVersion Int
+  analysis       Json
+  payload        Json
+  status         String   @default("")
+  previousId     String?
+  provider       String   @default("")
+  promptVersion  String   @default("")
+  createdAt      DateTime @default(now())
+
+  @@unique([situationId, version])
+  @@index([situationId, version])
 }

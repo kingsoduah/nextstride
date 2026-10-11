@@ -1,34 +1,58 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import type { AiProvider } from './ai-provider.interface';
-import { AiInvalidOutputError, AiUnavailableError } from './errors';
-import { GroqProvider, PROMPT_VERSION } from './groq.provider';
+import { AiInvalidOutputError, AiUnavailableError, errorDetail } from './errors';
+import { PROMPT_VERSION } from './groq.provider';
+import {
+  autoPriority,
+  buildProvider,
+  resolveSelection,
+  selectionName,
+  UnknownProviderError,
+  withProviderFallback,
+  type ProviderSelection,
+} from './provider-registry';
 import { RuleBasedFallback } from './rule-based-fallback';
 import type { ParsedContext, RecommendationDraft } from './schemas';
+import { apiError } from '../common/errors';
+
+/** Optional manual model selection. Absent = Auto mode (explicit priority order). */
+export interface ModelSelectionInput {
+  provider?: string;
+  model?: string;
+}
 
 /**
- * Orchestrator: Groq first (when configured), deterministic fallback otherwise.
- * Every attempt is logged to AiRun without user PII. Raw LLM output is never persisted.
+ * Orchestrator: Auto chain (or manual selection) first, deterministic
+ * fallback otherwise. Every attempt is logged to AiRun with the ACTUAL
+ * provider/model used — never a credential, never user PII.
  */
 @Injectable()
 export class AiService {
-  private readonly groq = new GroqProvider();
   private readonly fallback = new RuleBasedFallback();
 
   constructor(private readonly prisma: PrismaService) {}
 
-  private provider(): AiProvider {
-    return process.env.GROQ_API_KEY ? this.groq : this.fallback;
+  /** Selections to try: manual single (validated) or Auto priority chain. */
+  private selectionsFor(requested?: ModelSelectionInput): ProviderSelection[] {
+    if (requested?.provider == null && requested?.model == null) return autoPriority();
+    try {
+      return [resolveSelection(requested?.provider, requested?.model)];
+    } catch (err) {
+      if (err instanceof UnknownProviderError) {
+        throw apiError('VALIDATION_ERROR', err.message, HttpStatus.BAD_REQUEST);
+      }
+      throw err;
+    }
   }
 
-  private log(run: { situationId?: string; kind: string; status: string; latencyMs: number; validationErrors?: string }) {
+  private log(run: { situationId?: string; kind: string; provider: string; model: string; status: string; latencyMs: number; validationErrors?: string }) {
     void this.prisma.aiRun
       .create({
         data: {
           situationId: run.situationId,
           kind: run.kind,
-          provider: process.env.GROQ_API_KEY ? 'groq' : 'rule-based-fallback',
-          model: process.env.GROQ_MODEL ?? '',
+          provider: run.provider,
+          model: run.model,
           promptVersion: PROMPT_VERSION,
           status: run.status,
           latencyMs: run.latencyMs,
@@ -38,25 +62,44 @@ export class AiService {
       .catch(() => undefined);
   }
 
-  async understand(text: string, situationId?: string): Promise<{ context: ParsedContext; provider: string }> {
+  private providerLabel(sel: ProviderSelection): { provider: string; model: string } {
+    return { provider: selectionName(sel), model: sel.model };
+  }
+
+  async understand(
+    text: string,
+    situationId?: string,
+    selection?: ModelSelectionInput,
+  ): Promise<{ context: ParsedContext; provider: string; model: string }> {
     const started = Date.now();
-    const primary = this.provider();
+    const selections = this.selectionsFor(selection);
+    if (selections.length === 0) {
+      // Legacy: no provider keys configured → deterministic fallback is the
+      // primary; errors propagate (never silently swallowed).
+      const context = await this.fallback.understand(text);
+      return { context, provider: this.fallback.name, model: '' };
+    }
     try {
-      const context = await primary.understand(text);
-      this.log({ situationId, kind: 'understand', status: 'ok', latencyMs: Date.now() - started });
-      return { context, provider: primary.name };
+      // Manual mode: single selection; Auto: chain advancing only on eligible failures.
+      const { result: context, used } = await withProviderFallback(selections, (provider) =>
+        provider.understand(text),
+      );
+      const label = this.providerLabel(used);
+      this.log({ situationId, kind: 'understand', ...label, status: 'ok', latencyMs: Date.now() - started });
+      return { context, provider: label.provider, model: label.model };
     } catch (err) {
       const invalid = err instanceof AiInvalidOutputError;
       this.log({
         situationId,
         kind: 'understand',
+        provider: 'chain',
+        model: '',
         status: invalid ? 'invalid_output' : 'unavailable',
         latencyMs: Date.now() - started,
-        validationErrors: err instanceof Error ? err.message.slice(0, 500) : 'unknown',
+        validationErrors: errorDetail(err).slice(0, 500),
       });
-      if (primary === this.fallback) throw err;
       const context = await this.fallback.understand(text);
-      return { context, provider: this.fallback.name };
+      return { context, provider: this.fallback.name, model: '' };
     }
   }
 
@@ -65,21 +108,30 @@ export class AiService {
     context: ParsedContext;
     newInfo?: string;
     situationId?: string;
-  }): Promise<{ recommendation: RecommendationDraft; provider: string }> {
+    selection?: ModelSelectionInput;
+  }): Promise<{ recommendation: RecommendationDraft; provider: string; model: string }> {
     const started = Date.now();
-    const primary = this.provider();
+    const selections = this.selectionsFor(input.selection);
+    if (selections.length === 0) {
+      // Legacy: no provider keys configured → deterministic fallback is the
+      // primary; errors propagate (never silently swallowed).
+      const recommendation = await this.fallback.prioritize(input);
+      return { recommendation, provider: this.fallback.name, model: '' };
+    }
     try {
-      const recommendation = await primary.prioritize(input);
-      this.log({ situationId: input.situationId, kind: 'prioritize', status: 'ok', latencyMs: Date.now() - started });
-      return { recommendation, provider: primary.name };
+      const { result: recommendation, used } = await withProviderFallback(selections, (provider) =>
+        provider.prioritize(input),
+      );
+      const label = this.providerLabel(used);
+      this.log({ situationId: input.situationId, kind: 'prioritize', ...label, status: 'ok', latencyMs: Date.now() - started });
+      return { recommendation, provider: label.provider, model: label.model };
     } catch (err) {
       if (err instanceof AiUnavailableError) {
-        this.log({ situationId: input.situationId, kind: 'prioritize', status: 'unavailable', latencyMs: Date.now() - started, validationErrors: err.message.slice(0, 500) });
-        if (primary === this.fallback) throw err;
+        this.log({ situationId: input.situationId, kind: 'prioritize', provider: 'chain', model: '', status: 'unavailable', latencyMs: Date.now() - started, validationErrors: errorDetail(err).slice(0, 500) });
         const recommendation = await this.fallback.prioritize(input);
-        return { recommendation, provider: this.fallback.name };
+        return { recommendation, provider: this.fallback.name, model: '' };
       }
-      this.log({ situationId: input.situationId, kind: 'prioritize', status: 'invalid_output', latencyMs: Date.now() - started, validationErrors: err instanceof Error ? err.message.slice(0, 500) : 'unknown' });
+      this.log({ situationId: input.situationId, kind: 'prioritize', provider: 'chain', model: '', status: 'invalid_output', latencyMs: Date.now() - started, validationErrors: errorDetail(err).slice(0, 500) });
       throw err;
     }
   }

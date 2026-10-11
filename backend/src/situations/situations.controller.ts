@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -32,9 +32,15 @@ export class SituationsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Edit text (re-analyzes) or confirm understanding' })
+  @ApiOperation({ summary: 'Edit text (re-analyzes), confirm understanding, or rename' })
   update(@CurrentUser() user: RequestUser, @Param('id') id: string, @Body() dto: UpdateSituationDto) {
     return this.situations.update(user.id, id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete my situation and its records (ownership enforced server-side)' })
+  remove(@CurrentUser() user: RequestUser, @Param('id') id: string) {
+    return this.situations.remove(user.id, id);
   }
 
   @Post(':id/prioritize')

@@ -24,6 +24,8 @@ services:
       - key: GROQ_API_KEY
         sync: false # server-side only, never commit
       - key: GROQ_MODEL
-        value: openai/gpt-oss-20b
+        value: openai/gpt-oss-120b
+      - key: OPENROUTER_API_KEY
+        sync: false # Phase 8.5 Model Lab; server-side only, never commit
       # NOTE: no PORT entry — Render injects PORT automatically and the API
       # listens on process.env.PORT (see backend/src/main.ts).

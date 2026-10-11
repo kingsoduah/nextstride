@@ -13,6 +13,23 @@ const situationInclude = {
   feedback: true,
 };
 
+/** Max sidebar title length after normalization. */
+export const MAX_TITLE_LENGTH = 80;
+
+/**
+ * Normalize a user-supplied sidebar title: strip control characters (including
+ * newlines), collapse whitespace, trim, and clamp to MAX_TITLE_LENGTH.
+ * Exported for tests. Returns '' when nothing displayable remains.
+ */
+export function normalizeTitle(raw: string): string {
+  return raw
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_TITLE_LENGTH);
+}
+
 function toParsedContext(row: {
   uncertainties: string[];
   responsibilities: Array<{ title: string; category: string; timeRef: string; fixedTime: boolean; flexible: boolean; delegatable: boolean; detail: string }>;
@@ -57,12 +74,15 @@ export class SituationsService {
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: 50,
-      select: { id: true, text: true, confirmed: true, createdAt: true, updatedAt: true },
+      select: { id: true, text: true, title: true, confirmed: true, createdAt: true, updatedAt: true },
     });
   }
 
   async create(userId: string, dto: CreateSituationDto) {
-    const { context } = await this.ai.understand(dto.text.trim());
+    const { context } = await this.ai.understand(dto.text.trim(), undefined, {
+      provider: dto.provider,
+      model: dto.model,
+    });
     return this.prisma.situation.create({
       data: {
         userId,
@@ -85,6 +105,15 @@ export class SituationsService {
 
   async update(userId: string, id: string, dto: UpdateSituationDto) {
     const situation = await this.owned(id, userId);
+    // Rename: display-only and independent of `text`, so messages,
+    // recommendations, snapshots and history are never re-derived or lost.
+    if (dto.title !== undefined) {
+      const title = normalizeTitle(dto.title);
+      if (!title) {
+        throw apiError('VALIDATION_ERROR', 'Title must contain at least one visible character', HttpStatus.BAD_REQUEST);
+      }
+      await this.prisma.situation.update({ where: { id: situation.id }, data: { title } });
+    }
     if (dto.text?.trim()) {
       const { context } = await this.ai.understand(dto.text.trim(), id);
       await this.prisma.situationContext.deleteMany({ where: { situationId: id } });
@@ -146,7 +175,10 @@ export class SituationsService {
     if (!situation.context) throw apiError('VALIDATION_ERROR', 'Analyze the situation first', HttpStatus.BAD_REQUEST);
     const parsed = toParsedContext(situation.context);
     // Merge newly mentioned responsibilities without dropping history.
-    const { context: extra } = await this.ai.understand(dto.update_text.trim(), id);
+    const { context: extra } = await this.ai.understand(dto.update_text.trim(), id, {
+      provider: dto.provider,
+      model: dto.model,
+    });
     const titles = new Set(parsed.responsibilities.map((r) => r.title));
     for (const r of extra.responsibilities) {
       if (!titles.has(r.title)) parsed.responsibilities.push(r);
@@ -156,6 +188,7 @@ export class SituationsService {
       context: parsed,
       newInfo: dto.update_text.trim(),
       situationId: id,
+      selection: { provider: dto.provider, model: dto.model },
     });
     const version = situation.recommendations.length + 1;
     const [created] = await this.prisma.$transaction([
@@ -183,5 +216,26 @@ export class SituationsService {
       create: { situationId: id, helpful: dto.helpful, note: dto.note ?? '' },
       update: { helpful: dto.helpful, note: dto.note ?? '' },
     });
+  }
+
+  /**
+   * Delete one owned situation and everything recorded against it.
+   * Ownership is re-checked here — the frontend never decides who may delete.
+   * Everything except AiRun cascades through Prisma `onDelete: Cascade`
+   * relations; AiRun has no relation/FK, so it is removed explicitly in the
+   * same transaction. A transaction guarantees no partial deletion, and only
+   * this user's this situation is ever touched.
+   */
+  async remove(userId: string, id: string) {
+    const situation = await this.prisma.situation.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!situation) throw notFound('Situation not found');
+    await this.prisma.$transaction([
+      this.prisma.aiRun.deleteMany({ where: { situationId: id } }),
+      this.prisma.situation.delete({ where: { id: situation.id } }),
+    ]);
+    return { id: situation.id, deleted: true };
   }
 }

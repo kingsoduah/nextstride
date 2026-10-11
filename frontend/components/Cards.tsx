@@ -24,7 +24,8 @@ export function UnderstandingCard({
       <ul>
         {ctx.responsibilities.map((r) => (
           <li key={r.id}>
-            <strong>[{r.category}]</strong> {r.title} <span className="pill">{r.timeRef || "no time"}</span>
+            <strong>[{r.category === "other" ? "general" : r.category}]</strong> {r.title}{" "}
+            {r.timeRef ? <span className="pill">{r.timeRef}</span> : null}
             {r.fixedTime && <span className="pill">fixed time</span>}
             {r.delegatable && <span className="pill">delegatable</span>}
           </li>

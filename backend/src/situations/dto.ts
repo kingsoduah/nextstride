@@ -7,6 +7,18 @@ export class CreateSituationDto {
   @MinLength(3)
   @MaxLength(5000)
   text!: string;
+
+  @ApiPropertyOptional({ description: 'Manual model selection for evaluation (default: Auto). Validated against the server allowlist.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  provider?: string;
+
+  @ApiPropertyOptional({ description: 'Model id within the selected provider (default: provider default).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  model?: string;
 }
 
 export class UpdateSituationDto {
@@ -21,6 +33,14 @@ export class UpdateSituationDto {
   @IsOptional()
   @IsBoolean()
   confirmed?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Rename the situation in the sidebar. Normalized (trimmed, whitespace collapsed, control chars stripped). Never touches the situation text or its history.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  title?: string;
 }
 
 export class ReassessDto {
@@ -29,6 +49,18 @@ export class ReassessDto {
   @MinLength(3)
   @MaxLength(2000)
   update_text!: string;
+
+  @ApiPropertyOptional({ description: 'Manual model selection for evaluation (default: Auto). Validated against the server allowlist.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  provider?: string;
+
+  @ApiPropertyOptional({ description: 'Model id within the selected provider (default: provider default).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(128)
+  model?: string;
 }
 
 export class FeedbackDto {

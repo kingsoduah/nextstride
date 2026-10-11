@@ -43,7 +43,7 @@ Out of scope for this MVP: calendar integrations, automated messaging, notificat
 | Backend | NestJS 11 + TypeScript, REST, Swagger |
 | Database | PostgreSQL + Prisma ORM (migrations) |
 | Auth | Better Auth (email + password, 7-day sessions) |
-| AI | Groq API (`openai/gpt-oss-20b`) behind a provider interface, Zod-validated structured output, deterministic rule-based fallback |
+| AI | Groq API (`openai/gpt-oss-120b`) behind a provider interface, Zod-validated structured output, deterministic rule-based fallback |
 
 ## Architecture
 
@@ -93,7 +93,7 @@ Backend (`backend/.env`):
 | `BETTER_AUTH_URL` | Public API origin (local: `http://localhost:3001`) |
 | `CORS_ORIGIN` | Allowed web origin (local: `http://localhost:3000`) |
 | `GROQ_API_KEY` | Server-side Groq key (never exposed to the browser) |
-| `GROQ_MODEL` | Groq model id (e.g. `openai/gpt-oss-20b`) |
+| `GROQ_MODEL` | Groq model id (e.g. `openai/gpt-oss-120b`) |
 
 Frontend (`frontend/.env.local`):
 

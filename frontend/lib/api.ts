@@ -26,9 +26,63 @@ export async function api<T>(path: string, init?: { method?: string; body?: unkn
   return data as T;
 }
 
+export interface RecommendationV2Unknown {
+  field: string;
+  whyItMatters: string;
+  blocking: boolean;
+}
+
+export type RecommendationV2Status = "RECOMMEND" | "REASSESS" | "NEEDS_INPUT" | "INFEASIBLE";
+
+export interface RecommendationV2Payload {
+  nextMove: string;
+  why: string;
+  plan: string[];
+  whatCanWait: string[];
+  risk: string;
+  reassessmentTrigger: string;
+  assumptions: string[];
+  unknowns: RecommendationV2Unknown[];
+  options: string[];
+  status: RecommendationV2Status;
+}
+
+export interface RecommendationV2Row {
+  id: string;
+  version: number;
+  status: RecommendationV2Status;
+  contextVersion: number;
+  provider: string;
+  promptVersion: string;
+  previousId: string | null;
+  createdAt: string;
+  payload?: RecommendationV2Payload;
+}
+
+export interface RecommendationV2VersionMeta {
+  id: string;
+  version: number;
+  status: RecommendationV2Status;
+  contextVersion: number;
+  provider: string;
+  promptVersion: string;
+  previousId: string | null;
+  createdAt: string;
+}
+
+export interface RecommendationV2Response {
+  id: string;
+  version: number;
+  status: RecommendationV2Status;
+  provider: string;
+  recommendation: RecommendationV2Payload;
+}
+
 export interface Situation {
   id: string;
   text: string;
+  /** Owner-set sidebar name; null when never renamed. */
+  title?: string | null;
   confirmed: boolean;
   context: {
     responsibilities: Array<{
