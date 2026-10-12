@@ -5,6 +5,7 @@ import { Composer } from "@/components/Composer";
 import { ExampleCards } from "@/components/ExampleCards";
 import { ModelSelector } from "@/components/ModelSelector";
 import { loadModelSelection, saveModelSelection, type ModelSelection } from "@/lib/model-selection";
+import { notifySituationsChanged } from "@/app/(shell)/layout";
 import { api } from "@/lib/api";
 
 export default function HubPage() {
@@ -21,6 +22,10 @@ export default function HubPage() {
         method: "POST",
         body: { text, ...modelSel },
       });
+      // The shell layout owns the history list and persists across App
+      // Router navigations — signal it so the new situation appears in the
+      // sidebar/drawer without a full page reload.
+      notifySituationsChanged();
       router.push(`/situations/${situation.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not analyze that just now. Your text is saved — try again.");

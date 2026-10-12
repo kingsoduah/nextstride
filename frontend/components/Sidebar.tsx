@@ -19,6 +19,10 @@ interface SidebarProps {
   onRename?: (id: string, title: string) => Promise<string>;
   /** Deletes server-side; must reject when the delete did not happen. */
   onDelete?: (id: string) => Promise<void>;
+  /** Manual history refresh; omitted = no refresh control rendered. */
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  refreshError?: string | null;
 }
 
 function labelFor(s: SidebarSituation): string {
@@ -35,7 +39,7 @@ function failureText(e: unknown, fallback: string): string {
   return fallback;
 }
 
-export function Sidebar({ situations, activeId, onRename, onDelete }: SidebarProps) {
+export function Sidebar({ situations, activeId, onRename, onDelete, onRefresh, refreshing, refreshError }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = authClient.useSession();
@@ -137,7 +141,25 @@ export function Sidebar({ situations, activeId, onRename, onDelete }: SidebarPro
       <Link href="/hub" className="nav-item">
         <span aria-hidden>＋</span> New situation
       </Link>
-      <div className="nav-group">Recent</div>
+      <div className="nav-group-row">
+        <div className="nav-group">Recent</div>
+        {onRefresh && (
+          <button
+            className="nav-refresh-btn"
+            aria-label="Refresh history"
+            title="Refresh history"
+            disabled={refreshing}
+            onClick={onRefresh}
+          >
+            <span aria-hidden>⟳</span>
+          </button>
+        )}
+      </div>
+      {refreshError && (
+        <p className="nav-row-error" role="alert">
+          {refreshError}
+        </p>
+      )}
       {situations.length === 0 && <div className="nav-item muted">No situations yet</div>}
       {situations.slice(0, 10).map((s) => {
         const isActive = activeId === s.id || pathname === `/situations/${s.id}`;

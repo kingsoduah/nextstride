@@ -47,6 +47,15 @@ a { color: inherit; }
 }
 .sidebar .brand { font-weight: 700; font-size: 16px; padding: 4px 8px 12px; }
 .nav-group { font-size: 12px; color: var(--muted); padding: 12px 8px 4px; }
+.nav-group-row { display: flex; align-items: center; justify-content: space-between; }
+.nav-group-row .nav-group { padding-right: 0; }
+.nav-refresh-btn {
+  border: 0; background: transparent; color: var(--muted);
+  font-size: 15px; line-height: 1; padding: 8px; margin: 8px 4px 0 0;
+  border-radius: var(--radius); cursor: pointer; min-width: 36px; min-height: 36px;
+}
+.nav-refresh-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+.nav-refresh-btn:disabled { opacity: 0.55; cursor: default; }
 .nav-item {
   display: flex; align-items: center; gap: 8px;
   padding: 7px 8px; border-radius: var(--radius);
@@ -565,6 +574,21 @@ html, body { overflow-x: clip; }
   .card { padding: 16px; }
   .model-select { max-width: 110px; font-size: 12px; }
 }
+
+/* Pull-to-refresh indicator + refresh affordances (history views). */
+.ptr-indicator {
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  height: 0;
+  font-size: 13px; color: var(--muted);
+  transition: height 0.12s ease-out;
+}
+.ptr-indicator.active { height: 32px; }
+.link-btn {
+  border: 0; background: transparent; padding: 0;
+  color: var(--ink); text-decoration: underline; cursor: pointer; font: inherit;
+}
+.mobile-refresh-btn { margin-left: auto; min-width: 40px; min-height: 40px; }
 
 @media (max-width: 860px) {
   .sidebar { display: none; }
