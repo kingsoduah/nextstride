@@ -105,7 +105,11 @@ export function Composer({
             onStop={voice.handleMicStop}
           />
           <button className="icon-btn primary" type="submit" disabled={loading || (!value.trim() && !listening)} aria-label="Analyze my situation">
-            {loading ? "…" : "↑"}
+            {loading ? "…" : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 19V5m0 0l-6 6m6-6l6 6" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
           </button>
         </span>
       </div>
@@ -200,7 +204,11 @@ export function ControlledComposer({
             onStop={voice.handleMicStop}
           />
           <button className="icon-btn primary" type="submit" disabled={loading || (!value.trim() && !listening)} aria-label={submitLabel}>
-            {loading ? "…" : "↑"}
+            {loading ? "…" : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 19V5m0 0l-6 6m6-6l6 6" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
           </button>
         </span>
       </div>

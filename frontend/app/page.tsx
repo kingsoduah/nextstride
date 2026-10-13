@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { CheckGlyph, ClockGlyph, CubeGlyph } from "@/components/HeroIcons";
 
 /**
  * Public landing page (route `/`). Server-rendered shell with one small
@@ -8,11 +9,10 @@ import { useState } from "react";
  * signup/onboarding/hub flows, in-page sections, and the project GitHub.
  * No fake stats, testimonials, integrations, or community URLs.
  */
-const NAV_LINKS = [
+const CENTER_LINKS = [
   { href: "/", label: "Home" },
   { href: "#how", label: "How It Works" },
   { href: "#community", label: "Join Test Community" },
-  { href: "#contact", label: "Contact Us" },
 ];
 
 export default function Landing() {
@@ -24,7 +24,7 @@ export default function Landing() {
       <header className="lp-nav">
         <Link href="/" className="lp-brand" aria-label="NextStride home">
           <img
-            src="/brand/Primary_Logo_cropped.png"
+            src="/brand/Primary_Logo_light.png"
             alt="NextStride"
             className="lp-brand-logo"
             width={200}
@@ -32,13 +32,14 @@ export default function Landing() {
           />
         </Link>
         <nav className="lp-links" aria-label="Primary">
-          {NAV_LINKS.map((l) => (
+          {CENTER_LINKS.map((l) => (
             <Link key={l.label} href={l.href}>
               {l.label}
             </Link>
           ))}
         </nav>
         <div className="lp-nav-cta">
+          <Link href="#contact">Contact Us</Link>
           <Link href="/login" className="btn btn-secondary">
             Sign In
           </Link>
@@ -54,11 +55,13 @@ export default function Landing() {
       </header>
       {menuOpen && (
         <nav className="lp-mobile-menu" aria-label="Mobile">
-          {[...NAV_LINKS, { href: "/login", label: "Sign In" }].map((l) => (
-            <Link key={l.label} href={l.href} onClick={closeMenu}>
-              {l.label}
-            </Link>
-          ))}
+          {[...CENTER_LINKS, { href: "#contact", label: "Contact Us" }, { href: "/login", label: "Sign In" }].map(
+            (l) => (
+              <Link key={l.label} href={l.href} onClick={closeMenu}>
+                {l.label}
+              </Link>
+            ),
+          )}
         </nav>
       )}
 
@@ -73,8 +76,8 @@ export default function Landing() {
             </h1>
             <p className="lp-accent">Find your next best step.</p>
             <p className="lp-description">
-              NextStride helps you think through competing priorities, understand
-              your constraints, and decide what deserves your attention next.
+              Think through competing priorities, understand your constraints, and
+              decide what deserves your attention next.
             </p>
             <div className="lp-cta-row">
               <Link href="/signup" className="btn btn-primary btn-lg">
@@ -85,7 +88,25 @@ export default function Landing() {
               </Link>
             </div>
           </div>
-          <div className="lp-hero-visual" aria-label="Preview of the Priority Hub">
+          <div className="lp-hero-panel" aria-label="Preview of the Priority Hub">
+            <div className="lp-float lp-float-clock" aria-hidden="true">
+              <span className="lp-float-icon lp-float-teal">
+                <ClockGlyph />
+              </span>
+              <span>Deadlines in view</span>
+            </div>
+            <div className="lp-float lp-float-check" aria-hidden="true">
+              <span className="lp-float-icon lp-float-navy">
+                <CheckGlyph />
+              </span>
+              <span>Next step decided</span>
+            </div>
+            <div className="lp-float lp-float-cube" aria-hidden="true">
+              <span className="lp-float-icon lp-float-lime">
+                <CubeGlyph />
+              </span>
+              <span>3 priorities</span>
+            </div>
             <div className="lp-mock">
               <p className="lp-mock-label">Your situation</p>
               <p className="lp-mock-text">
