@@ -143,10 +143,7 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
           <div className="drawer-root">
             <div className="drawer-scrim" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
             <div className="drawer-panel" role="dialog" aria-modal="true" aria-label="Navigation menu">
-              <div className="drawer-head">
-                <span className="brand">
-                  <img src="/brand/Stacked_Logo_cropped.png" alt="NextStride" className="brand-logo-stacked" width={122} height={64} />
-                </span>
+              <div className="drawer-head drawer-head-close">
                 <button
                   className="icon-btn"
                   aria-label="Close navigation menu"

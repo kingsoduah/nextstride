@@ -186,7 +186,7 @@ a { color: inherit; }
   border: 1px solid var(--border); background: var(--surface);
   display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
 }
-.icon-btn.primary { background: var(--teal); color: var(--teal-ink); border-color: var(--teal); }
+.icon-btn.primary { background: var(--teal); color: #02120D; border-color: var(--teal); }
 .icon-btn.primary:hover:not(:disabled) { background: var(--teal-dark); border-color: var(--teal-dark); color: #fff; }
 .icon-btn:disabled { opacity: 0.5; cursor: default; }
 .voice-btn.listening {
@@ -586,6 +586,9 @@ html, body { overflow-x: clip; }
     border-bottom: 1px solid var(--navy-line);
   }
   .drawer-head .brand { font-weight: 700; font-size: 16px; }
+  /* Single-logo header: the drawer's only wordmark lives in the sidebar
+     below, so this row only carries the close button. */
+  .drawer-head-close { justify-content: flex-end; padding: 8px 12px; }
   .drawer-head .icon-btn {
     border-color: rgba(255, 255, 255, 0.28);
     background: transparent;
