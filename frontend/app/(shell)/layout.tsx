@@ -127,7 +127,7 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
             <span aria-hidden>☰</span>
           </button>
           <span className="mobile-brand">
-            <img src="/brand/Primary_Logo.png" alt="NextStride" className="brand-logo-sm" width={120} height={67} />
+            <img src="/brand/Primary_Logo_cropped.png" alt="NextStride" className="brand-logo-sm" width={120} height={30} />
           </span>
           <button
             className="icon-btn mobile-refresh-btn"
@@ -145,7 +145,7 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
             <div className="drawer-panel" role="dialog" aria-modal="true" aria-label="Navigation menu">
               <div className="drawer-head">
                 <span className="brand">
-                  <img src="/brand/Primary_Logo.png" alt="NextStride" className="brand-logo-sm" width={120} height={67} />
+                  <img src="/brand/Stacked_Logo_cropped.png" alt="NextStride" className="brand-logo-stacked" width={122} height={64} />
                 </span>
                 <button
                   className="icon-btn"
