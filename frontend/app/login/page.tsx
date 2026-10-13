@@ -32,6 +32,7 @@ export default function LoginPage() {
     <main className="auth-page">
       <div className="auth-modal">
         <div className="auth-modal-header">
+          <img src="/brand/App_Icon.png" alt="NextStride logo" className="auth-brand-mark" width={44} height={44} />
           <h1>Welcome back</h1>
           <p className="muted">Sign in to continue to NextStride</p>
         </div>

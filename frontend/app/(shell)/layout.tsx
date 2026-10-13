@@ -3,15 +3,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sidebar, type SidebarSituation } from "@/components/Sidebar";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
+import { SITUATIONS_CHANGED_EVENT } from "@/lib/situations-events";
 import { authClient } from "@/lib/auth-client";
 import { api } from "@/lib/api";
-
-/** Cross-component signal: something mutated the situation list. */
-export const SITUATIONS_CHANGED_EVENT = "nextstride:situations-changed";
-
-export function notifySituationsChanged() {
-  window.dispatchEvent(new Event(SITUATIONS_CHANGED_EVENT));
-}
 
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -132,7 +126,9 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
           >
             <span aria-hidden>☰</span>
           </button>
-          <span className="mobile-brand">NextStride</span>
+          <span className="mobile-brand">
+            <img src="/brand/Primary_Logo.png" alt="NextStride" className="brand-logo-sm" width={120} height={67} />
+          </span>
           <button
             className="icon-btn mobile-refresh-btn"
             aria-label="Refresh history"
@@ -148,7 +144,9 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
             <div className="drawer-scrim" onClick={() => setDrawerOpen(false)} aria-hidden="true" />
             <div className="drawer-panel" role="dialog" aria-modal="true" aria-label="Navigation menu">
               <div className="drawer-head">
-                <span className="brand">NextStride</span>
+                <span className="brand">
+                  <img src="/brand/Primary_Logo.png" alt="NextStride" className="brand-logo-sm" width={120} height={67} />
+                </span>
                 <button
                   className="icon-btn"
                   aria-label="Close navigation menu"

@@ -134,7 +134,9 @@ export function Sidebar({ situations, activeId, onRename, onDelete, onRefresh, r
 
   return (
     <aside className="sidebar" aria-label="NextStride navigation">
-      <div className="brand">NextStride</div>
+      <div className="brand">
+        <img src="/brand/Primary_Logo.png" alt="NextStride" className="brand-logo" width={150} height={84} />
+      </div>
       <Link href="/hub" className={`nav-item ${pathname === "/hub" ? "active" : ""}`}>
         <span aria-hidden>◇</span> Priority Hub
       </Link>

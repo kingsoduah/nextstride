@@ -5,7 +5,7 @@ import { Composer } from "@/components/Composer";
 import { ExampleCards } from "@/components/ExampleCards";
 import { ModelSelector } from "@/components/ModelSelector";
 import { loadModelSelection, saveModelSelection, type ModelSelection } from "@/lib/model-selection";
-import { notifySituationsChanged } from "@/app/(shell)/layout";
+import { notifySituationsChanged } from "@/lib/situations-events";
 import { api } from "@/lib/api";
 
 export default function HubPage() {

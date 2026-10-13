@@ -33,6 +33,7 @@ export default function SignupPage() {
     <main className="auth-page">
       <div className="auth-modal">
         <div className="auth-modal-header">
+          <img src="/brand/App_Icon.png" alt="NextStride logo" className="auth-brand-mark" width={44} height={44} />
           <h1>Get started</h1>
           <p className="muted">Create your NextStride account</p>
         </div>
