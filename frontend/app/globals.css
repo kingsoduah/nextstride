@@ -353,7 +353,7 @@ textarea.field { min-height: 90px; resize: vertical; }
   max-width: 1120px; margin: 0 auto; padding: 12px 20px;
 }
 .lp-brand { display: inline-flex; align-items: center; justify-self: start; }
-.lp-brand-logo { display: block; height: 40px; width: auto; }
+.lp-brand-logo { display: block; height: 100px; width: auto; }
 .lp-links { display: flex; align-items: center; gap: 26px; margin: 0; justify-self: center; }
 .lp-links a { color: var(--ink-2); text-decoration: none; font-size: 14px; font-weight: 500; }
 .lp-links a:hover { color: var(--teal-link); }
@@ -473,7 +473,10 @@ textarea.field { min-height: 90px; resize: vertical; }
   .lp-links { display: none; }
   .lp-menu-btn { display: inline-flex; }
   .lp-nav { grid-template-columns: auto 1fr auto; gap: 12px; }
-  .lp-brand-logo { height: 32px; }
+  .lp-brand-logo { height: 60px; }
+  /* At 60px the logo (~240px wide) needs the full row: Sign In and Contact
+     live in the hamburger menu on small screens. */
+  .lp-nav-cta .btn, .lp-nav-cta > a:not(.btn) { display: none; }
   .lp-nav-cta { gap: 8px; }
   .lp-nav-cta > a:not(.btn) { display: none; }
   .lp-mobile-menu {
