@@ -1,5 +1,10 @@
 import type { AiProvider } from './ai-provider.interface';
-import { AiInvalidOutputError, AiUnavailableError } from './errors';
+import {
+  AiInvalidOutputError,
+  AiProviderError,
+  AiUnavailableError,
+  attachProviderAttempts,
+} from './errors';
 import { GeminiProvider, geminiCompleteJson, geminiConfiguredModel } from './gemini.provider';
 import { GroqProvider, groqCompleteJson } from './groq.provider';
 import { OPENROUTER_BASE_URL, OPENROUTER_FREE_MODELS, OpenRouterProvider, type OpenRouterFreeModel } from './openrouter.provider';
@@ -19,6 +24,17 @@ export interface ProviderSelection {
 }
 
 export const AUTO_MODE_ID = 'auto';
+
+/**
+ * True when the request means "Auto": no provider, blank, or the literal
+ * 'auto', with no model. Auto must use the full priority chain — resolving it
+ * as a single selection silently drops Gemini fallback.
+ */
+export function isAutoSelection(provider?: string, model?: string): boolean {
+  if (model != null && model.trim() !== '') return false;
+  const p = (provider ?? '').trim().toLowerCase();
+  return p === '' || p === AUTO_MODE_ID;
+}
 
 /**
  * Temporarily parked providers (pre-deployment stabilization). A parked
@@ -75,6 +91,9 @@ export class UnknownProviderError extends Error {
 export function resolveSelection(provider?: string, model?: string): ProviderSelection {
   const p = (provider ?? 'auto').trim().toLowerCase();
   if (p === 'auto' || p === '') {
+    if (model != null && model.trim() !== '') {
+      throw new UnknownProviderError('Auto mode does not accept a model id');
+    }
     const first = autoPriority()[0];
     if (!first) throw new UnknownProviderError('No AI provider is configured');
     return first;
@@ -187,9 +206,13 @@ export async function withProviderFallback<T>(
         lastErr = err;
         continue;
       }
+      // Non-retryable (provider rejection, malformed output, bug): stop
+      // here, but record every provider/model attempt for diagnostics.
+      if (err instanceof Error) attachProviderAttempts(err, tried);
       throw err;
     }
   }
+  if (lastErr instanceof Error) attachProviderAttempts(lastErr, tried);
   if (lastErr) throw lastErr;
   throw new AiUnavailableError('No AI provider is configured');
 }
@@ -203,11 +226,24 @@ export const AI_UNAVAILABLE_MESSAGE =
   'The AI provider is busy right now (rate limit or outage). Retry in a moment, or pick a different model.';
 export const AI_INVALID_OUTPUT_MESSAGE =
   'The selected model returned unusable output. Retry, or pick a different model in the selector.';
+/**
+ * Provider auth/config rejection. Deliberately distinct from the transient
+ * "busy" message: retrying will not help until an operator fixes the provider
+ * credentials or model configuration. Upstream details stay server-side.
+ */
+export const AI_PROVIDER_REJECTED_MESSAGE =
+  'The AI provider rejected its configuration (API key or model). An administrator must check the provider settings before retrying.';
 
 /** Normalize a provider error for user-facing responses (no secrets, no raw payloads). */
 export function normalizeProviderError(err: unknown): { code: 'AI_UNAVAILABLE' | 'AI_INVALID_OUTPUT'; message: string; status: number } {
   if (err instanceof AiUnavailableError) {
     return { code: 'AI_UNAVAILABLE', message: AI_UNAVAILABLE_MESSAGE, status: 503 };
+  }
+  // Provider auth/config rejection: a service problem, not malformed output.
+  // The concrete cause stays in logs; callers get a safe, actionable message.
+  if (err instanceof AiProviderError) {
+    const message = err.kind === 'request' ? AI_UNAVAILABLE_MESSAGE : AI_PROVIDER_REJECTED_MESSAGE;
+    return { code: 'AI_UNAVAILABLE', message, status: 503 };
   }
   if (err instanceof AiInvalidOutputError) {
     return { code: 'AI_INVALID_OUTPUT', message: AI_INVALID_OUTPUT_MESSAGE, status: 502 };

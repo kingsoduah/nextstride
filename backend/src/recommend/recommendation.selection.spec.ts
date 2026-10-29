@@ -132,6 +132,26 @@ describe('LlmReasoner provider selection', () => {
     expect(r.name).toBe('gemini');
     expect(r.model).toBe('gemini-3.1-flash-lite');
   });
+
+  it('treats explicit provider "auto" as the full Auto chain (groq -> gemini)', async () => {
+    process.env[GROQ_KEY] = 'groq-key';
+    process.env[GEMINI_KEY] = 'gemini-key';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse((init?.body as string) ?? '{}');
+        if (body.model && String(body.model).includes('gpt-oss')) return jsonResponse({}, 503);
+        return jsonResponse({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(validReasoning()) }] } }],
+        });
+      }),
+    );
+    const r = new LlmReasoner('auto');
+    const out = await r.reason(REASON_INPUT);
+    expect(out).toEqual(validReasoning());
+    expect(r.name).toBe('gemini');
+    expect(r.model).toBe('gemini-3.1-flash-lite');
+  });
 });
 
 describe('recommend() manual-selection validation', () => {

@@ -1,10 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AiInvalidOutputError, AiUnavailableError, errorDetail } from '../ai/errors';
+import { AiInvalidOutputError, AiProviderError, AiUnavailableError, errorDetail, lastProviderAttempt } from '../ai/errors';
 import { groqCompleteJson } from '../ai/groq.provider';
 import {
   UnknownProviderError,
   autoPriority,
+  isAutoSelection,
   resolveSelection,
   selectionName,
   transportFor,
@@ -44,7 +45,7 @@ export class LlmReasoner implements ReasoningExtractor {
   private readonly selections: ProviderSelection[];
 
   constructor(provider?: string, model?: string) {
-    if (provider == null && model == null) {
+    if (isAutoSelection(provider, model)) {
       this.selections = autoPriority();
       this.name = 'auto';
       this.model = '';
@@ -198,8 +199,20 @@ export class RecommendationService {
       model = extractorModel(extractor);
       await this.logAiRun(input.situationId, provider, model, 'ok', Date.now() - started);
     } catch (err) {
+      // Report the provider/model that actually failed (Auto starts as 'auto').
+      const last = lastProviderAttempt(err);
+      if (last) {
+        provider = last.provider;
+        model = last.model;
+      }
       if (err instanceof AiUnavailableError) {
         await this.logAiRun(input.situationId, provider, model, 'unavailable', Date.now() - started, err);
+        draft = FallbackRecommender.build(context, analysis);
+        provider = FallbackRecommender.name;
+        model = '';
+        await this.logAiRun(input.situationId, provider, model, 'ok-fallback', Date.now() - started);
+      } else if (err instanceof AiProviderError) {
+        await this.logAiRun(input.situationId, provider, model, 'provider_error', Date.now() - started, err);
         draft = FallbackRecommender.build(context, analysis);
         provider = FallbackRecommender.name;
         model = '';
@@ -257,7 +270,10 @@ export class RecommendationService {
       try {
         raw = await extractor.reason(input);
       } catch (err) {
-        if (err instanceof AiInvalidOutputError) {
+        // Only retry when the failure could be transient. Non-retryable
+        // rejections (auth/config) and unavailable providers must not cause a
+        // second identical request through the provider chain.
+        if (err instanceof AiInvalidOutputError && err.retryable && attempt < 2) {
           lastErr = err;
           continue;
         }
@@ -266,6 +282,7 @@ export class RecommendationService {
       const parsed = RecommendationV2Schema.safeParse(raw);
       if (parsed.success) return parsed.data;
       lastErr = new AiInvalidOutputError(parsed.error.message);
+      if (attempt >= 2) break;
     }
     throw lastErr instanceof Error ? lastErr : new AiInvalidOutputError('Recommendation failed validation');
   }

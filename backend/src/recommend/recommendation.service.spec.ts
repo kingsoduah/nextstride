@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AiInvalidOutputError, AiUnavailableError } from '../ai/errors';
+import { AiInvalidOutputError, AiProviderError, AiUnavailableError } from '../ai/errors';
 import type { DecisionContextV2 } from '../decision/spec';
 import type { DecisionAnalysisV2 } from '../analysis/analysis';
 import { applyStatusGuardrails, RecommendationService } from './recommendation.service';
@@ -72,6 +72,17 @@ class UnavailableReasoner implements ReasoningExtractor {
   async reason(): Promise<unknown> {
     this.calls += 1;
     throw new AiUnavailableError('down');
+  }
+}
+
+/** Throws a fixed error on every attempt; counts calls. */
+class FailingReasoner implements ReasoningExtractor {
+  readonly name = 'stub-fail';
+  calls = 0;
+  constructor(private readonly error: Error) {}
+  async reason(): Promise<unknown> {
+    this.calls += 1;
+    throw this.error;
   }
 }
 
@@ -173,6 +184,36 @@ describe('RecommendationService', () => {
     const stub = new UnavailableReasoner();
     const out = await svc.recommend({ situationId: 'sit-1', userId: 'u-1', extractor: stub });
     expect(stub.calls).toBe(1);
+    expect(out.provider).toBe('deterministic-fallback');
+  });
+
+  it('does not retry a non-retryable invalid-output error', async () => {
+    const { prisma, store } = stubPrisma();
+    seedContext(store);
+    const svc = new RecommendationService(prisma as never);
+    const stub = new FailingReasoner(new AiInvalidOutputError('rejected', { retryable: false }));
+    const out = await svc.recommend({ situationId: 'sit-1', userId: 'u-1', extractor: stub });
+    expect(stub.calls).toBe(1);
+    expect(out.provider).toBe('deterministic-fallback');
+  });
+
+  it('does not retry a provider auth/config rejection', async () => {
+    const { prisma, store } = stubPrisma();
+    seedContext(store);
+    const svc = new RecommendationService(prisma as never);
+    const stub = new FailingReasoner(new AiProviderError('401', { kind: 'auth' }));
+    const out = await svc.recommend({ situationId: 'sit-1', userId: 'u-1', extractor: stub });
+    expect(stub.calls).toBe(1);
+    expect(out.provider).toBe('deterministic-fallback');
+  });
+
+  it('retries once a retryable invalid-output error, then falls back', async () => {
+    const { prisma, store } = stubPrisma();
+    seedContext(store);
+    const svc = new RecommendationService(prisma as never);
+    const stub = new FailingReasoner(new AiInvalidOutputError('bad shape', { retryable: true }));
+    const out = await svc.recommend({ situationId: 'sit-1', userId: 'u-1', extractor: stub });
+    expect(stub.calls).toBe(2);
     expect(out.provider).toBe('deterministic-fallback');
   });
 

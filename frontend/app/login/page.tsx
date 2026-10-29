@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { authCatchMessage, authErrorMessage } from "@/lib/auth-errors";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,19 +14,27 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || !password) return;
+    if (!email || !password || busy) return;
     setBusy(true);
     setError("");
-    authClient.signIn.email(
-      { email, password },
-      {
-        onSuccess: () => router.push("/hub"),
-        onError: (ctx) => {
-          setError(ctx.error.message ?? "Login failed");
-          setBusy(false);
-        },
-      },
-    );
+    try {
+      // Bounded wait: Render's free tier can take ~50 s to wake, but a dead
+      // connection must not leave the form stuck on "Signing in…" forever.
+      const { error: authError } = await authClient.signIn.email(
+        { email, password },
+        { timeout: 60_000 },
+      );
+      if (authError) {
+        setError(authErrorMessage(authError, "Login failed. Please try again."));
+        return;
+      }
+      router.push("/hub");
+    } catch (err) {
+      // Network failures/timeouts reject the promise instead of calling onError.
+      setError(authCatchMessage(err, "Login failed. Please try again."));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

@@ -1,10 +1,12 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AiInvalidOutputError, AiUnavailableError, errorDetail } from './errors';
+import { AiInvalidOutputError, AiProviderError, AiUnavailableError, errorDetail, lastProviderAttempt } from './errors';
 import { PROMPT_VERSION } from './groq.provider';
 import {
   autoPriority,
   buildProvider,
+  isAutoSelection,
+  normalizeProviderError,
   resolveSelection,
   selectionName,
   UnknownProviderError,
@@ -34,7 +36,7 @@ export class AiService {
 
   /** Selections to try: manual single (validated) or Auto priority chain. */
   private selectionsFor(requested?: ModelSelectionInput): ProviderSelection[] {
-    if (requested?.provider == null && requested?.model == null) return autoPriority();
+    if (isAutoSelection(requested?.provider, requested?.model)) return autoPriority();
     try {
       return [resolveSelection(requested?.provider, requested?.model)];
     } catch (err) {
@@ -66,6 +68,23 @@ export class AiService {
     return { provider: selectionName(sel), model: sel.model };
   }
 
+  /**
+   * Failed-chain attribution: report the last provider/model actually tried
+   * (secret-free). Falls back to 'chain' only when no attempt was recorded,
+   * e.g. when no provider is configured.
+   */
+  private failureLabel(err: unknown): { provider: string; model: string } {
+    const last = lastProviderAttempt(err);
+    return last ? { provider: last.provider, model: last.model } : { provider: 'chain', model: '' };
+  }
+
+  /** Status for AiRun rows: distinguish config/auth rejection from bad output. */
+  private failureStatus(err: unknown): string {
+    if (err instanceof AiProviderError) return 'provider_error';
+    if (err instanceof AiInvalidOutputError) return 'invalid_output';
+    return 'unavailable';
+  }
+
   async understand(
     text: string,
     situationId?: string,
@@ -88,13 +107,11 @@ export class AiService {
       this.log({ situationId, kind: 'understand', ...label, status: 'ok', latencyMs: Date.now() - started });
       return { context, provider: label.provider, model: label.model };
     } catch (err) {
-      const invalid = err instanceof AiInvalidOutputError;
       this.log({
         situationId,
         kind: 'understand',
-        provider: 'chain',
-        model: '',
-        status: invalid ? 'invalid_output' : 'unavailable',
+        ...this.failureLabel(err),
+        status: this.failureStatus(err),
         latencyMs: Date.now() - started,
         validationErrors: errorDetail(err).slice(0, 500),
       });
@@ -126,12 +143,24 @@ export class AiService {
       this.log({ situationId: input.situationId, kind: 'prioritize', ...label, status: 'ok', latencyMs: Date.now() - started });
       return { recommendation, provider: label.provider, model: label.model };
     } catch (err) {
+      this.log({
+        situationId: input.situationId,
+        kind: 'prioritize',
+        ...this.failureLabel(err),
+        status: this.failureStatus(err),
+        latencyMs: Date.now() - started,
+        validationErrors: errorDetail(err).slice(0, 500),
+      });
       if (err instanceof AiUnavailableError) {
-        this.log({ situationId: input.situationId, kind: 'prioritize', provider: 'chain', model: '', status: 'unavailable', latencyMs: Date.now() - started, validationErrors: errorDetail(err).slice(0, 500) });
         const recommendation = await this.fallback.prioritize(input);
         return { recommendation, provider: this.fallback.name, model: '' };
       }
-      this.log({ situationId: input.situationId, kind: 'prioritize', provider: 'chain', model: '', status: 'invalid_output', latencyMs: Date.now() - started, validationErrors: errorDetail(err).slice(0, 500) });
+      // Provider auth/config rejection: safe, accurate classification. Raw
+      // upstream detail stays in logs/AiRun, never in the response.
+      if (err instanceof AiProviderError) {
+        const { code, message, status } = normalizeProviderError(err);
+        throw apiError(code, message, status as HttpStatus);
+      }
       throw err;
     }
   }

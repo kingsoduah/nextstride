@@ -6,6 +6,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { toNodeHandler } from 'better-auth/node';
 import { AppModule } from './app.module';
 import { auth } from './auth/auth';
+import { trustedClientIpMiddleware } from './auth/client-ip';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -25,6 +26,7 @@ async function bootstrap() {
   // Better Auth owns /api/auth/*, Swagger owns /docs*. Nest routes handle the rest.
   // (The session check lives at GET /api/session/me so it is never shadowed.)
   const server = app.getHttpAdapter().getInstance();
+  server.use('/api/auth', trustedClientIpMiddleware);
   server.use('/api/auth', toNodeHandler(auth));
 
   const config = new DocumentBuilder()

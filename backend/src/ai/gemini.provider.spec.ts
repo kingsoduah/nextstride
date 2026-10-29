@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AiInvalidOutputError, AiUnavailableError } from './errors';
+import { AiInvalidOutputError, AiProviderError, AiUnavailableError } from './errors';
 import { GEMINI_DEFAULT_MODEL, GeminiProvider, geminiConfiguredModel } from './gemini.provider';
 
 const KEY = 'GEMINI_API_KEY';
@@ -84,7 +84,7 @@ describe('GeminiProvider transport', () => {
     );
   });
 
-  it('maps 429/503 to unavailable and 401/404 to invalid', async () => {
+  it('maps 429/503 to unavailable and 401/404 to provider rejection', async () => {
     process.env[KEY] = 'k';
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 429)));
     await expect(new GeminiProvider().understand('some longer situation text here')).rejects.toBeInstanceOf(
@@ -92,12 +92,51 @@ describe('GeminiProvider transport', () => {
     );
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 404)));
     await expect(new GeminiProvider().understand('some longer situation text here')).rejects.toBeInstanceOf(
-      AiInvalidOutputError,
+      AiProviderError,
     );
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 401)));
     await expect(new GeminiProvider().understand('some longer situation text here')).rejects.toBeInstanceOf(
-      AiInvalidOutputError,
+      AiProviderError,
     );
+  });
+
+  it('does not retry non-transient 4xx (auth/config) and marks them non-retryable', async () => {
+    process.env[KEY] = 'k';
+    for (const status of [400, 401, 403, 404]) {
+      const fetchMock = vi.fn(async () => jsonResponse({}, status));
+      vi.stubGlobal('fetch', fetchMock);
+      const err = await new GeminiProvider()
+        .understand('a long enough situation text')
+        .then(() => null, (e) => e);
+      expect(err).toBeInstanceOf(AiProviderError);
+      expect((err as AiProviderError).retryable).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('retries a transient 429 once, then succeeds', async () => {
+    process.env[KEY] = 'k';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({}, 429))
+      .mockResolvedValueOnce(jsonResponse(geminiBody(JSON.stringify(validUnderstand()))));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(new GeminiProvider().understand('a long enough situation text')).resolves.toEqual(validUnderstand());
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry a timeout/abort', async () => {
+    process.env[KEY] = 'k';
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    const fetchMock = vi.fn(async () => {
+      throw abort;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(new GeminiProvider().understand('a long enough situation text')).rejects.toBeInstanceOf(
+      AiUnavailableError,
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('maps network failures to unavailable and missing key without calling', async () => {

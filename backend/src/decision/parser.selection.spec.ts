@@ -95,6 +95,26 @@ describe('LlmContextExtractor provider selection', () => {
     expect(ex.model).toBe('gemini-3.1-flash-lite');
   });
 
+  it('treats explicit provider "auto" as the full Auto chain (groq -> gemini)', async () => {
+    process.env[GROQ_KEY] = 'groq-key';
+    process.env[GEMINI_KEY] = 'gemini-key';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse((init?.body as string) ?? '{}');
+        if (body.model && String(body.model).includes('gpt-oss')) return jsonResponse({}, 429);
+        return jsonResponse({
+          candidates: [{ content: { parts: [{ text: JSON.stringify(validDraft()) }] } }],
+        });
+      }),
+    );
+    const ex = new LlmContextExtractor('auto');
+    const draft = await ex.extract('I have an assignment due tomorrow.', REF);
+    expect(draft).toEqual(validDraft());
+    expect(ex.name).toBe('gemini');
+    expect(ex.model).toBe('gemini-3.1-flash-lite');
+  });
+
   it('uses groq directly when only groq is configured', async () => {
     process.env[GROQ_KEY] = 'groq-key';
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(chatContent(JSON.stringify(validDraft())))));

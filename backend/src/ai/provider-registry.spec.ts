@@ -1,15 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AiInvalidOutputError, AiUnavailableError } from './errors';
+import { AiInvalidOutputError, AiProviderError, AiUnavailableError, errorDetail, providerAttempts } from './errors';
 import {
   extractJson,
   isEligibleForFallback,
   openAiCompatibleCompleteJson,
+  sanitizeSnippet,
 } from './openai-compatible';
 import {
+  AI_INVALID_OUTPUT_MESSAGE,
+  AI_PROVIDER_REJECTED_MESSAGE,
+  AI_UNAVAILABLE_MESSAGE,
   autoPriority,
   availableProviders,
   buildProvider,
+  isAutoSelection,
+  isGeminiConfigured,
   isOpenRouterConfigured,
+  normalizeProviderError,
   PARKED_PROVIDERS,
   resolveSelection,
   selectionName,
@@ -53,6 +60,12 @@ describe('resolveSelection allowlist', () => {
   it('defaults to Auto (first priority) with no input', () => {
     process.env[GROQ_KEY] = 'x';
     expect(resolveSelection()).toEqual({ provider: 'groq', model: 'openai/gpt-oss-120b' });
+  });
+
+  it('rejects a model supplied with Auto (would silently pin one provider)', () => {
+    process.env[GROQ_KEY] = 'x';
+    expect(() => resolveSelection('auto', 'openai/gpt-oss-120b')).toThrow(UnknownProviderError);
+    expect(() => resolveSelection(undefined, 'openai/gpt-oss-120b')).toThrow(UnknownProviderError);
   });
 
   it('accepts gemini with the configured model and rejects others', () => {
@@ -183,13 +196,30 @@ describe('withProviderFallback chain', () => {
       { provider: 'openrouter', model: 'm2' },
     ] as const;
     const calls: string[] = [];
-    await expect(
-      withProviderFallback([...sels], async (_p, sel) => {
-        calls.push(sel.model);
-        throw new AiInvalidOutputError('bad key');
-      }),
-    ).rejects.toBeInstanceOf(AiInvalidOutputError);
+    const err = await withProviderFallback([...sels], async (_p, sel) => {
+      calls.push(sel.model);
+      throw new AiProviderError('bad key', { kind: 'auth' });
+    }).then(() => null, (e) => e);
+    expect(err).toBeInstanceOf(AiProviderError);
     expect(calls).toEqual(['m1']);
+    // Attempted provider/model is preserved for failure diagnostics.
+    expect(providerAttempts(err)).toEqual([{ provider: 'groq', model: 'm1' }]);
+  });
+
+  it('attributes every tried provider/model when the chain is exhausted', async () => {
+    const sels = [
+      { provider: 'groq', model: 'm1' },
+      { provider: 'gemini', model: 'm2' },
+    ] as const;
+    const err = await withProviderFallback([...sels], async (_p, sel) => {
+      throw new AiUnavailableError(`${sel.model} down`);
+    }).then(() => null, (e) => e);
+    expect(err).toBeInstanceOf(AiUnavailableError);
+    expect(providerAttempts(err)).toEqual([
+      { provider: 'groq', model: 'm1' },
+      { provider: 'gemini', model: 'm2' },
+    ]);
+    expect(errorDetail(err)).toContain('groq/m1');
   });
 
   it('throws the last eligible error when every provider fails', async () => {
@@ -203,6 +233,50 @@ describe('withProviderFallback chain', () => {
 
   it('throws unavailable when the chain is empty', async () => {
     await expect(withProviderFallback([], async () => 'x')).rejects.toBeInstanceOf(AiUnavailableError);
+  });
+});
+
+describe('isAutoSelection', () => {
+  it('treats absent, blank, and literal auto as Auto when no model is given', () => {
+    expect(isAutoSelection()).toBe(true);
+    expect(isAutoSelection(undefined, undefined)).toBe(true);
+    expect(isAutoSelection('')).toBe(true);
+    expect(isAutoSelection(' AUTO ')).toBe(true);
+    expect(isAutoSelection('auto', '')).toBe(true);
+  });
+
+  it('treats a concrete provider or explicit model as manual', () => {
+    expect(isAutoSelection('groq')).toBe(false);
+    expect(isAutoSelection('gemini')).toBe(false);
+    expect(isAutoSelection('auto', 'gemini-3.1-flash-lite')).toBe(false);
+  });
+});
+
+describe('Auto provider availability', () => {
+  it('orders Groq then Gemini when both keys are visible', () => {
+    process.env[GROQ_KEY] = 'x';
+    process.env[GEMINI_KEY] = 'g';
+    expect(autoPriority()).toEqual([
+      { provider: 'groq', model: 'openai/gpt-oss-120b' },
+      { provider: 'gemini', model: 'gemini-3.1-flash-lite' },
+    ]);
+  });
+
+  it('stays Groq-only, without error, when Gemini is not configured', () => {
+    process.env[GROQ_KEY] = 'x';
+    expect(isGeminiConfigured()).toBe(false);
+    expect(autoPriority()).toEqual([{ provider: 'groq', model: 'openai/gpt-oss-120b' }]);
+    expect(availableProviders()).toEqual([{ provider: 'groq', models: ['openai/gpt-oss-120b'] }]);
+  });
+
+  it('advances to Gemini on a retryable Groq failure', async () => {
+    process.env[GROQ_KEY] = 'x';
+    process.env[GEMINI_KEY] = 'g';
+    const out = await withProviderFallback(autoPriority(), async (_p, sel) => {
+      if (sel.provider === 'groq') throw new AiUnavailableError('Groq 429');
+      return 'gemini-ok' as const;
+    });
+    expect(out.used.provider).toBe('gemini');
   });
 });
 
@@ -253,6 +327,82 @@ const BASE = {
   userPrompt: 'user',
 };
 
+describe('credential redaction', () => {
+  // Synthetic fixture only — not a real credential.
+  const GOOGLE_KEY = 'AIzaTESTONLY_0000000000000000000000';
+
+  it('redacts Google, Groq, sk-, bearer, and key= credentials', () => {
+    const gsk = 'gsk_TESTONLYabcdefghijklmnopqrstuvwxyz012345';
+    const out = sanitizeSnippet(`key ${GOOGLE_KEY} Bearer abc.def.ghi sk-live12345678 key=topsecret ${gsk}`);
+    expect(out).not.toContain(GOOGLE_KEY);
+    expect(out).not.toContain('sk-live12345678');
+    expect(out).not.toContain('topsecret');
+    expect(out).not.toContain(gsk);
+    expect(out).toContain('[redacted]');
+  });
+
+  it('keeps upstream error details free of keys', async () => {
+    const res = {
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ error: { message: `API key ${GOOGLE_KEY} is invalid` } }),
+    } as unknown as Response;
+    vi.stubGlobal('fetch', vi.fn(async () => res));
+    const err = await openAiCompatibleCompleteJson({ ...BASE, apiKey: GOOGLE_KEY }).then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(AiProviderError);
+    expect(String((err as AiProviderError).details)).not.toContain(GOOGLE_KEY);
+    expect(String((err as AiProviderError).details)).toContain('[redacted]');
+  });
+
+  it('redacts a Groq gsk_ key echoed by the provider', async () => {
+    const gsk = 'gsk_TESTONLYabcdefghijklmnopqrstuvwxyz012345';
+    const res = {
+      ok: false,
+      status: 401,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ error: { message: `Incorrect API key provided: ${gsk}` } }),
+    } as unknown as Response;
+    vi.stubGlobal('fetch', vi.fn(async () => res));
+    const err = await openAiCompatibleCompleteJson({ ...BASE, apiKey: gsk }).then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(AiProviderError);
+    const detail = errorDetail(err);
+    expect(detail).not.toContain(gsk);
+    expect(detail).toContain('[redacted]');
+  });
+
+  it('returns static client messages with no upstream detail', () => {
+    const invalid = normalizeProviderError(new AiInvalidOutputError(`key ${GOOGLE_KEY} rejected`));
+    expect(invalid.message).toBe(AI_INVALID_OUTPUT_MESSAGE);
+    expect(invalid.message).not.toContain(GOOGLE_KEY);
+    const unavailable = normalizeProviderError(new AiUnavailableError(`key ${GOOGLE_KEY}`));
+    expect(unavailable.message).toBe(AI_UNAVAILABLE_MESSAGE);
+    expect(unavailable.message).not.toContain(GOOGLE_KEY);
+    // Provider auth/config rejection is a service problem, not malformed output.
+    const rejected = normalizeProviderError(new AiProviderError(`key ${GOOGLE_KEY} rejected`));
+    expect(rejected.code).toBe('AI_UNAVAILABLE');
+    expect(rejected.status).toBe(503);
+    // Generic request-kind rejection keeps the transient message.
+    expect(rejected.message).toBe(AI_UNAVAILABLE_MESSAGE);
+    expect(rejected.message).not.toContain(GOOGLE_KEY);
+
+    // Auth/config rejections are actionable and not described as transient.
+    for (const kind of ['auth', 'configuration'] as const) {
+      const config = normalizeProviderError(new AiProviderError(`key ${GOOGLE_KEY} rejected`, { kind }));
+      expect(config.code).toBe('AI_UNAVAILABLE');
+      expect(config.status).toBe(503);
+      expect(config.message).toBe(AI_PROVIDER_REJECTED_MESSAGE);
+      expect(config.message).not.toContain(GOOGLE_KEY);
+    }
+  });
+});
+
 describe('openAiCompatibleCompleteJson transport', () => {
   it('returns parsed JSON on success', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(chatContent('{"a":1}'))));
@@ -278,13 +428,77 @@ describe('openAiCompatibleCompleteJson transport', () => {
     expect(body.response_format).toEqual({ type: 'json_object' });
   });
 
-  it('maps 429/503 to unavailable (eligible) and 401 to invalid (ineligible)', async () => {
+  it('maps 429/503 to unavailable (eligible) and 401 to a provider rejection (ineligible)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 429)));
     await expect(openAiCompatibleCompleteJson(BASE)).rejects.toBeInstanceOf(AiUnavailableError);
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 503)));
     await expect(openAiCompatibleCompleteJson(BASE)).rejects.toBeInstanceOf(AiUnavailableError);
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 401)));
-    await expect(openAiCompatibleCompleteJson(BASE)).rejects.toBeInstanceOf(AiInvalidOutputError);
+    await expect(openAiCompatibleCompleteJson(BASE)).rejects.toBeInstanceOf(AiProviderError);
+  });
+
+  it('retries a transient 429 once, then succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({}, 429))
+      .mockResolvedValueOnce(jsonResponse(chatContent('{"a":1}')));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(openAiCompatibleCompleteJson(BASE)).resolves.toEqual({ a: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a 5xx once, then succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({}, 503))
+      .mockResolvedValueOnce(jsonResponse(chatContent('{"a":1}')));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(openAiCompatibleCompleteJson(BASE)).resolves.toEqual({ a: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries a fast network failure once, then succeeds', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValueOnce(jsonResponse(chatContent('{"a":1}')));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(openAiCompatibleCompleteJson(BASE)).resolves.toEqual({ a: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry non-transient 4xx responses', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({}, 401));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(openAiCompatibleCompleteJson(BASE)).rejects.toBeInstanceOf(AiProviderError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('classifies provider 4xx rejections by kind', async () => {
+    const cases: Array<[number, string]> = [
+      [401, 'auth'],
+      [403, 'auth'],
+      [400, 'configuration'],
+      [404, 'configuration'],
+      [418, 'request'],
+    ];
+    for (const [status, kind] of cases) {
+      vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, status)));
+      const err = await openAiCompatibleCompleteJson(BASE).then(() => null, (e) => e);
+      expect(err).toBeInstanceOf(AiProviderError);
+      expect((err as AiProviderError).kind).toBe(kind);
+    }
+  });
+
+  it('does not retry a timeout/abort (latency is already spent)', async () => {
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    const fetchMock = vi.fn(async () => {
+      throw abort;
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(openAiCompatibleCompleteJson(BASE)).rejects.toBeInstanceOf(AiUnavailableError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('maps network failures to unavailable', async () => {
@@ -300,8 +514,10 @@ describe('openAiCompatibleCompleteJson transport', () => {
   });
 
   it('throws invalid after repeated malformed JSON', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(chatContent('oops not json'))));
+    const fetchMock = vi.fn(async () => jsonResponse(chatContent('oops not json')));
+    vi.stubGlobal('fetch', fetchMock);
     await expect(openAiCompatibleCompleteJson(BASE)).rejects.toBeInstanceOf(AiInvalidOutputError);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
 
