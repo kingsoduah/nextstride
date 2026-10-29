@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { authCatchMessage, authErrorMessage } from "@/lib/auth-errors";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -14,19 +15,24 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !password) return;
+    if (!name || !email || !password || busy) return;
     setBusy(true);
     setError("");
-    authClient.signUp.email(
-      { name, email, password },
-      {
-        onSuccess: () => router.push("/onboarding"),
-        onError: (ctx) => {
-          setError(ctx.error.message ?? "Sign up failed");
-          setBusy(false);
-        },
-      },
-    );
+    try {
+      const { error: authError } = await authClient.signUp.email(
+        { name, email, password },
+        { timeout: 60_000 },
+      );
+      if (authError) {
+        setError(authErrorMessage(authError, "Sign up failed. Please try again."));
+        return;
+      }
+      router.push("/onboarding");
+    } catch (err) {
+      setError(authCatchMessage(err, "Sign up failed. Please try again."));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (

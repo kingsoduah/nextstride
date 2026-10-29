@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AiService } from './ai.service';
 
 const GROQ_KEY = 'GROQ_API_KEY';
@@ -35,6 +35,7 @@ afterEach(() => {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
   }
+  vi.unstubAllGlobals();
 });
 
 describe('AiService model selection', () => {
@@ -43,6 +44,43 @@ describe('AiService model selection', () => {
     const out = await svc.understand('I have an assignment due tomorrow.');
     expect(out.provider).toBe('rule-based-fallback');
     expect(out.context.responsibilities.length).toBeGreaterThan(0);
+  });
+
+  it('treats explicit provider "auto" as the full chain and advances to Gemini', async () => {
+    process.env[GROQ_KEY] = 'groq-key';
+    process.env[GEMINI_KEY] = 'gemini-key';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse((init?.body as string) ?? '{}');
+        if (body.model && String(body.model).includes('gpt-oss')) {
+          return { ok: false, status: 429, json: async () => ({}) } as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({ responsibilities: [], conflicts: [], uncertainties: [] }),
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+        } as Response;
+      }),
+    );
+    const svc = new AiService(stubPrisma());
+    const out = await svc.understand('I have an assignment due tomorrow.', undefined, {
+      provider: 'auto',
+    });
+    expect(out.provider).toBe('gemini');
+    expect(out.model).toBe('gemini-3.1-flash-lite');
   });
 
   it('rejects unknown providers with HTTP 400', async () => {

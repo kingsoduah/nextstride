@@ -1,9 +1,17 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { AiProvider } from './ai-provider.interface';
-import { AiInvalidOutputError, AiUnavailableError } from './errors';
-import { extractJson, upstreamDetail } from './openai-compatible';
+import { AiInvalidOutputError, AiProviderError, AiUnavailableError, providerErrorKind } from './errors';
+import { extractJson, sanitizeSnippet, upstreamDetail } from './openai-compatible';
 import { PROMPT_VERSION, prioritizeUserPrompt, SYSTEM_PROMPT, understandUserPrompt } from './prompts';
 import { ParsedContext, RecommendationSchema, SituationContextSchema } from './schemas';
+
+const transportLog = new Logger('ai-transport');
+
+/** One bounded retry for 429/5xx and fast network errors; never for timeouts. */
+const TRANSIENT_RETRY_MS = 250;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 
@@ -63,8 +71,14 @@ export async function geminiCompleteJson(
           }),
         });
       } catch (err) {
+        const aborted = err instanceof Error && err.name === 'AbortError';
+        if (!aborted && attempt < maxAttempts) {
+          transportLog.warn(`Gemini network failure; retrying (${attempt}/${maxAttempts})`);
+          await sleep(TRANSIENT_RETRY_MS * attempt);
+          continue;
+        }
         throw new AiUnavailableError(
-          err instanceof Error && err.name === 'AbortError'
+          aborted
             ? `Gemini request timed out (model ${model})`
             : `Gemini request failed (model ${model})`,
         );
@@ -72,15 +86,26 @@ export async function geminiCompleteJson(
       if (!res.ok) {
         const detail = await upstreamDetail(res);
         if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
-          throw new AiUnavailableError(`Gemini request failed: ${detail} (model ${model})`);
+          const message = `Gemini request failed: ${detail} (model ${model})`;
+          if (attempt < maxAttempts) {
+            transportLog.warn(`${message}; retrying (${attempt}/${maxAttempts})`);
+            await sleep(TRANSIENT_RETRY_MS * attempt);
+            continue;
+          }
+          transportLog.warn(message);
+          throw new AiUnavailableError(message);
         }
-        throw new AiInvalidOutputError(`Gemini rejected the request: ${detail} (model ${model})`);
+        throw new AiProviderError(
+          `Gemini rejected the request: ${detail} (model ${model})`,
+          { kind: providerErrorKind(res.status) },
+        );
       }
       const data = (await res.json()) as GeminiResponse;
       try {
         return extractJson(extractText(data, model));
       } catch (err) {
         if (err instanceof AiInvalidOutputError) {
+          if (!err.retryable) throw err;
           lastInvalid = err;
         } else {
           lastInvalid = new AiInvalidOutputError('LLM response was not valid JSON');
@@ -88,10 +113,14 @@ export async function geminiCompleteJson(
       }
     } catch (err) {
       if (err instanceof AiUnavailableError) throw err;
+      if (err instanceof AiProviderError) throw err;
       if (err instanceof AiInvalidOutputError) {
+        if (!err.retryable) throw err;
         lastInvalid = err;
       } else {
-        throw new AiUnavailableError(err instanceof Error ? err.message : 'Gemini request failed');
+        throw new AiUnavailableError(
+          sanitizeSnippet(err instanceof Error ? err.message : 'Gemini request failed'),
+        );
       }
     } finally {
       clearTimeout(timeout);

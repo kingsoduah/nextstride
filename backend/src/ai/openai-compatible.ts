@@ -1,7 +1,17 @@
 import { Logger } from '@nestjs/common';
-import { AiInvalidOutputError, AiUnavailableError } from './errors';
+import { AiInvalidOutputError, AiProviderError, AiUnavailableError, providerErrorKind, redactSecrets } from './errors';
 
 const transportLog = new Logger('ai-transport');
+
+/**
+ * One bounded retry for transient failures (429, 5xx, fast network errors).
+ * Timeouts are deliberately not retried: a 30 s wait already consumed the
+ * latency budget, and retrying would double it before provider fallback.
+ */
+const TRANSIENT_RETRY_MS = 250;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 /**
  * Phase 8.5: shared transport for OpenAI-compatible Chat Completions endpoints
@@ -51,10 +61,7 @@ export function isEligibleForFallback(status: number | null, err: unknown): bool
  * only an error object; this is defence in depth.
  */
 export function sanitizeSnippet(text: string): string {
-  return text
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}/g, '[redacted]')
-    .replace(/\bkey=[A-Za-z0-9._-]+/gi, 'key=[redacted]')
+  return redactSecrets(text)
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 240);
@@ -163,8 +170,14 @@ export async function openAiCompatibleCompleteJson(call: OpenAiCompatibleCall): 
         });
       } catch (err) {
         // Network failure / abort (timeout) — eligible for fallback.
+        const aborted = err instanceof Error && err.name === 'AbortError';
+        if (!aborted && attempt < maxAttempts) {
+          transportLog.warn(`${providerLabel} network failure; retrying (${attempt}/${maxAttempts})`);
+          await sleep(TRANSIENT_RETRY_MS * attempt);
+          continue;
+        }
         throw new AiUnavailableError(
-          err instanceof Error && err.name === 'AbortError'
+          aborted
             ? `${providerLabel} request timed out`
             : `${providerLabel} request failed`,
         );
@@ -172,11 +185,22 @@ export async function openAiCompatibleCompleteJson(call: OpenAiCompatibleCall): 
       if (!res.ok) {
         const detail = await upstreamDetail(res);
         if (isEligibleForFallback(res.status, null)) {
-          throw new AiUnavailableError(`${providerLabel} request failed: ${detail} (model ${model})`);
+          const message = `${providerLabel} request failed: ${detail} (model ${model})`;
+          if (attempt < maxAttempts) {
+            transportLog.warn(`${message}; retrying (${attempt}/${maxAttempts})`);
+            await sleep(TRANSIENT_RETRY_MS * attempt);
+            continue;
+          }
+          transportLog.warn(message);
+          throw new AiUnavailableError(message);
         }
-        // Auth / bad-request / other 4xx: ineligible, surface as invalid output
-        // so callers do NOT silently fall back to a different model.
-        throw new AiInvalidOutputError(`${providerLabel} rejected the request: ${detail} (model ${model})`);
+        // Auth / bad-request / other 4xx: ineligible for retry or silent
+        // fallback — the same request will fail the same way. This is a
+        // provider configuration problem, not malformed model output.
+        throw new AiProviderError(
+          `${providerLabel} rejected the request: ${detail} (model ${model})`,
+          { kind: providerErrorKind(res.status) },
+        );
       }
       const data = (await res.json()) as { model?: unknown; choices?: Array<{ message?: { content?: string } }> };
       // Observability: which model the upstream says actually served the call.
@@ -191,10 +215,14 @@ export async function openAiCompatibleCompleteJson(call: OpenAiCompatibleCall): 
       }
     } catch (err) {
       if (err instanceof AiUnavailableError) throw err;
+      if (err instanceof AiProviderError) throw err;
       if (err instanceof AiInvalidOutputError) {
+        if (!err.retryable) throw err;
         lastInvalid = err;
       } else {
-        throw new AiUnavailableError(err instanceof Error ? err.message : `${providerLabel} request failed`);
+        throw new AiUnavailableError(
+          err instanceof Error ? sanitizeSnippet(err.message) : `${providerLabel} request failed`,
+        );
       }
     } finally {
       clearTimeout(timeout);

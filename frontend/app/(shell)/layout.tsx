@@ -10,17 +10,23 @@ import { api } from "@/lib/api";
 export default function ShellLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { data: session, isPending } = authClient.useSession();
+  const { data: session, isPending, error: sessionError, refetch } = authClient.useSession();
   const [situations, setSituations] = useState<SidebarSituation[]>([]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
+  const [retryingSession, setRetryingSession] = useState(false);
+  const [sessionRetryError, setSessionRetryError] = useState("");
   const refreshInFlight = useRef(false);
   const drawerBodyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isPending && !session) router.replace("/login");
-  }, [isPending, session, router]);
+    if (isPending || session) return;
+    // Only a confirmed 401 means signed out. A timeout/5xx from get-session
+    // must not force a valid user back to /login; the retry screen handles it.
+    if (sessionError && sessionError.status !== 401) return;
+    router.replace("/login");
+  }, [isPending, session, sessionError, router]);
 
   /**
    * Single source of truth for the history list. Replaces state wholesale
@@ -105,7 +111,54 @@ export default function ShellLayout({ children }: { children: React.ReactNode })
     enabled: drawerOpen,
   });
 
-  if (isPending || !session) return <main className="center"><div className="skeleton" /></main>;
+  if (isPending) return <main className="center"><div className="skeleton" /></main>;
+
+  // The session request failed for a non-auth reason (offline, timeout, 5xx).
+  // Keep the user here and offer an explicit retry rather than signing out.
+  const sessionUnavailable = !session && !!sessionError && sessionError.status !== 401;
+  if (sessionUnavailable) {
+    return (
+      <main className="center">
+        <div className="card" style={{ maxWidth: 420 }}>
+          <p role="alert">Couldn&apos;t verify your session. This is usually temporary.</p>
+          {sessionRetryError && <p role="alert">{sessionRetryError}</p>}
+          <button
+            className="btn btn-primary btn-block"
+            disabled={retryingSession}
+            onClick={async () => {
+              setRetryingSession(true);
+              setSessionRetryError("");
+              // refetch() rejects on network failure and can hang on a stalled
+              // request; bound it so the button never stays disabled forever.
+              let timer: ReturnType<typeof setTimeout> | undefined;
+              try {
+                await Promise.race([
+                  refetch(),
+                  new Promise<never>((_, reject) => {
+                    timer = setTimeout(
+                      () => reject(new Error("session retry timed out")),
+                      15_000,
+                    );
+                  }),
+                ]);
+              } catch {
+                setSessionRetryError(
+                  "Still couldn't reach the server. Check your connection and try again.",
+                );
+              } finally {
+                if (timer) clearTimeout(timer);
+                setRetryingSession(false);
+              }
+            }}
+          >
+            {retryingSession ? "Retrying…" : "Retry"}
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (!session) return <main className="center"><div className="skeleton" /></main>;
   return (
     <div className="shell">
       <Sidebar

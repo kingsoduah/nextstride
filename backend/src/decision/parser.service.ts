@@ -1,12 +1,14 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AiUnavailableError, AiInvalidOutputError, errorDetail } from '../ai/errors';
+import { AiUnavailableError, AiInvalidOutputError, AiProviderError, errorDetail, lastProviderAttempt } from '../ai/errors';
 import { groqCompleteJson } from '../ai/groq.provider';
 import {
   AI_INVALID_OUTPUT_MESSAGE,
   AI_UNAVAILABLE_MESSAGE,
   UnknownProviderError,
   autoPriority,
+  isAutoSelection,
+  normalizeProviderError,
   resolveSelection,
   selectionName,
   transportFor,
@@ -140,7 +142,7 @@ export class LlmContextExtractor implements ContextExtractor {
   private readonly selections: ProviderSelection[];
 
   constructor(provider?: string, model?: string) {
-    if (provider == null && model == null) {
+    if (isAutoSelection(provider, model)) {
       this.selections = autoPriority();
       this.name = 'auto';
       this.model = '';
@@ -224,9 +226,19 @@ export class DecisionParserService {
     try {
       draft = await extractor.extract(rawText, reference);
     } catch (err) {
-      await this.logAiRun(input.situationId, extractor.name, extractorModel(extractor), err instanceof AiInvalidOutputError ? 'invalid_output' : 'unavailable', Date.now() - started, err);
+      const last = lastProviderAttempt(err);
+      const logProvider = last?.provider ?? extractor.name;
+      const logModel = last?.model ?? extractorModel(extractor);
+      const status = err instanceof AiProviderError
+        ? 'provider_error'
+        : err instanceof AiInvalidOutputError ? 'invalid_output' : 'unavailable';
+      await this.logAiRun(input.situationId, logProvider, logModel, status, Date.now() - started, err);
       if (err instanceof AiUnavailableError) {
         throw apiError('AI_UNAVAILABLE', AI_UNAVAILABLE_MESSAGE, HttpStatus.SERVICE_UNAVAILABLE);
+      }
+      if (err instanceof AiProviderError) {
+        const mapped = normalizeProviderError(err);
+        throw apiError(mapped.code, mapped.message, mapped.status as HttpStatus);
       }
       throw apiError('AI_INVALID_OUTPUT', AI_INVALID_OUTPUT_MESSAGE, HttpStatus.BAD_GATEWAY);
     }
